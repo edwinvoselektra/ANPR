@@ -1,0 +1,61 @@
+import Fastify from "fastify";
+import cookie from "@fastify/cookie";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
+import { Prisma } from "@prisma/client";
+import { ZodError } from "zod";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { config } from "./config.js";
+import { prisma } from "./lib/prisma.js";
+import { authRoutes } from "./routes/auth.js";
+import { cameraRoutes } from "./routes/cameras.js";
+import { dashboardRoutes } from "./routes/dashboard.js";
+import { healthRoutes } from "./routes/health.js";
+import { simulatorRoutes } from "./routes/simulator.js";
+import { userRoutes } from "./routes/users.js";
+
+export function buildServer() {
+  const app = Fastify({ logger: { redact: ["req.headers.cookie", "req.body.password", "req.body.rtspUrl", "req.body.username"] }, bodyLimit: 1_048_576, trustProxy: true });
+  void app.register(cookie);
+  void app.register(helmet, { contentSecurityPolicy: false });
+  void app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
+
+  app.addHook("onRequest", async (request, reply) => {
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method) && request.headers.cookie) {
+      const origin = request.headers.origin;
+      if (origin && origin !== config.WEB_ORIGIN) return reply.code(403).send({ error: "INVALID_ORIGIN", message: "Ongeldige aanvraagbron." });
+    }
+  });
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof ZodError) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Controleer de ingevulde gegevens.", fields: error.flatten().fieldErrors });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") return reply.code(409).send({ error: "DUPLICATE", message: "Deze waarde bestaat al." });
+      if (error.code === "P2025") return reply.code(404).send({ error: "NOT_FOUND", message: "Het gevraagde onderdeel bestaat niet." });
+    }
+    const candidateStatus = typeof error === "object" && error !== null && "statusCode" in error
+      ? (error as { statusCode?: unknown }).statusCode : undefined;
+    const status = typeof candidateStatus === "number" ? candidateStatus : 500;
+    const safeMessage = error instanceof Error ? error.message : "Ongeldige aanvraag.";
+    if (status >= 500) app.log.error({ err: error }, "Onverwachte API-fout");
+    return reply.code(status).send({ error: status >= 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR", message: status >= 500 ? "Er ging intern iets mis." : safeMessage });
+  });
+
+  void app.register(healthRoutes);
+  void app.register(authRoutes);
+  void app.register(userRoutes);
+  void app.register(cameraRoutes);
+  void app.register(dashboardRoutes);
+  void app.register(simulatorRoutes);
+  return app;
+}
+
+const executedFile = process.argv[1];
+if (executedFile && fileURLToPath(import.meta.url) === resolve(executedFile)) {
+  const app = buildServer();
+  const shutdown = async () => { await app.close(); await prisma.$disconnect(); process.exit(0); };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  try { await app.listen({ host: "0.0.0.0", port: config.API_PORT }); }
+  catch (error) { app.log.error(error); await prisma.$disconnect(); process.exit(1); }
+}

@@ -1,0 +1,112 @@
+name: anpr-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Maak eerst .env op basis van .env.example}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER ontbreekt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD ontbreekt}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    command: ["npm", "run", "db:migrate"]
+    environment: &api-environment
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL ontbreekt}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      CAMERA_CREDENTIALS_KEY: ${CAMERA_CREDENTIALS_KEY:?CAMERA_CREDENTIALS_KEY ontbreekt}
+      NODE_ENV: ${NODE_ENV:-development}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      STORAGE_PATH: ${STORAGE_PATH:-/app/storage}
+      API_PORT: 4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    command: ["npm", "run", "dev", "-w", "@anpr/api"]
+    environment: *api-environment
+    ports:
+      - "4000:4000"
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    command: ["npm", "run", "dev", "-w", "@anpr/web"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      API_INTERNAL_URL: http://api:4000
+      NEXT_PUBLIC_API_BASE: /api
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+  seed:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    command: ["npm", "run", "db:seed"]
+    environment: *api-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  redis_data:
+  storage_data:

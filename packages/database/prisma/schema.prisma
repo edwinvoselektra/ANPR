@@ -1,0 +1,398 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CameraDirection {
+  INCOMING
+  OUTGOING
+  BOTH
+}
+
+enum CameraStatus {
+  ONLINE
+  OFFLINE
+  CONNECTION_PROBLEM
+  ANPR_UNAVAILABLE
+  DISABLED
+}
+
+enum CameraConnectionMode {
+  URL
+  FIELDS
+}
+
+enum CameraZoneType {
+  RECTANGLE
+  POLYGON
+}
+
+enum PassageSource {
+  DEMO
+  ANPR
+  MANUAL
+}
+
+enum PassageStatus {
+  ACTIVE
+  REVIEW
+  DELETED
+}
+
+enum VehicleType {
+  CAR
+  VAN
+  TRUCK
+  MOTORCYCLE
+  BUS
+  TRAILER
+  UNKNOWN
+}
+
+enum VehicleColor {
+  BLACK
+  WHITE
+  GRAY
+  SILVER
+  RED
+  BLUE
+  GREEN
+  YELLOW
+  BROWN
+  ORANGE
+  OTHER
+  UNKNOWN
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model User {
+  id                 String               @id @default(uuid()) @db.Uuid
+  email              String               @unique
+  username           String               @unique
+  displayName        String
+  passwordHash       String
+  active             Boolean              @default(true)
+  failedLoginCount   Int                  @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  roles              UserRole[]
+  sessions           UserSession[]
+  auditLogs          AuditLog[]           @relation("AuditActor")
+  groupMembersAdded  PlateGroupMember[]   @relation("GroupMemberAddedBy")
+  retentionExceptions RetentionException[]
+  pushSubscriptions  PushSubscription[]
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @unique
+  description String?
+  system      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique
+  description String
+  createdAt   DateTime         @default(now())
+  roles       RolePermission[]
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserSession {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastSeenAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Camera {
+  id                       String               @id @default(uuid()) @db.Uuid
+  name                     String               @unique
+  location                 String
+  description              String?
+  connectionMode           CameraConnectionMode @default(FIELDS)
+  rtspProtocol             String               @default("rtsp")
+  rtspHost                 String?
+  rtspPort                 Int                  @default(554)
+  rtspPath                 String?
+  rtspUsernameEncrypted    String?
+  rtspPasswordEncrypted    String?
+  direction                CameraDirection
+  status                   CameraStatus         @default(DISABLED)
+  lastConnectionAt         DateTime?
+  lastConnectionSuccessAt  DateTime?
+  lastConnectionErrorCode  String?
+  lastConnectionError      String?
+  lastVehicleRegistrationAt DateTime?
+  lastSnapshotObjectId     String?
+  active                   Boolean              @default(false)
+  anprSettings             Json?
+  vehicleDetectionSettings Json?
+  latitude                 Decimal?             @db.Decimal(9, 6)
+  longitude                Decimal?             @db.Decimal(9, 6)
+  displayOrder             Int                  @default(0)
+  offlineTimeoutSeconds    Int                  @default(120)
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  zones                    CameraZone[]
+  passages                 Passage[]
+  hits                     Hit[]
+
+  @@index([active, displayOrder])
+  @@index([status])
+}
+
+model CameraZone {
+  id        String         @id @default(uuid()) @db.Uuid
+  cameraId  String         @db.Uuid
+  name      String         @default("Herkenningsgebied")
+  type      CameraZoneType
+  points    Json
+  active    Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  camera    Camera         @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+
+  @@index([cameraId])
+}
+
+model Passage {
+  id                     String          @id @default(uuid()) @db.Uuid
+  originalLicensePlate   String
+  normalizedLicensePlate String
+  displayLicensePlate    String
+  plateConfidence        Float?
+  timestamp              DateTime        @default(now())
+  cameraId               String          @db.Uuid
+  location               String
+  direction              CameraDirection
+  vehicleColor           VehicleColor    @default(UNKNOWN)
+  vehicleType            VehicleType     @default(UNKNOWN)
+  vehicleConfidence      Float?
+  vehicleImage1ObjectId  String?
+  vehicleImage2ObjectId  String?
+  plateImageObjectId     String?
+  isHit                  Boolean         @default(false)
+  status                 PassageStatus   @default(ACTIVE)
+  source                 PassageSource   @default(ANPR)
+  trackId                String?
+  expiresAt              DateTime
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  camera                 Camera          @relation(fields: [cameraId], references: [id], onDelete: Restrict)
+  vehicle                Vehicle?
+  plateDetections        PlateDetection[]
+  hits                   Hit[]
+  retentionExceptions   RetentionException[]
+
+  @@index([normalizedLicensePlate])
+  @@index([timestamp])
+  @@index([cameraId, timestamp])
+  @@index([vehicleColor])
+  @@index([vehicleType])
+  @@index([isHit, timestamp])
+  @@index([expiresAt])
+}
+
+model Vehicle {
+  id         String        @id @default(uuid()) @db.Uuid
+  passageId  String        @unique @db.Uuid
+  type       VehicleType
+  color      VehicleColor
+  confidence Float?
+  metadata   Json?
+  createdAt  DateTime      @default(now())
+  passage    Passage       @relation(fields: [passageId], references: [id], onDelete: Cascade)
+}
+
+model PlateDetection {
+  id                     String   @id @default(uuid()) @db.Uuid
+  passageId              String   @db.Uuid
+  rawLicensePlate        String
+  normalizedLicensePlate String
+  confidence             Float
+  frameObjectId          String?
+  frameTimestampMs       Int?
+  createdAt              DateTime @default(now())
+  passage                Passage  @relation(fields: [passageId], references: [id], onDelete: Cascade)
+
+  @@index([passageId])
+  @@index([normalizedLicensePlate])
+}
+
+model PlateGroup {
+  id                   String             @id @default(uuid()) @db.Uuid
+  name                 String             @unique
+  description          String?
+  color                String
+  icon                 String?
+  pushNotifications    Boolean            @default(false)
+  active               Boolean            @default(true)
+  reasonRequired       Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  members              PlateGroupMember[]
+  hits                 Hit[]
+
+  @@index([active])
+}
+
+model PlateGroupMember {
+  id                     String     @id @default(uuid()) @db.Uuid
+  groupId                String     @db.Uuid
+  normalizedLicensePlate String
+  displayLicensePlate    String
+  reason                 String?
+  description            String?
+  note                   String?
+  validFrom               DateTime?
+  validUntil              DateTime?
+  active                  Boolean    @default(true)
+  addedById               String?    @db.Uuid
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+  group                   PlateGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  addedBy                 User?      @relation("GroupMemberAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+
+  @@unique([groupId, normalizedLicensePlate])
+  @@index([normalizedLicensePlate, active])
+  @@index([groupId])
+}
+
+model Hit {
+  id                     String             @id @default(uuid()) @db.Uuid
+  passageId              String             @db.Uuid
+  cameraId               String             @db.Uuid
+  groupId                String             @db.Uuid
+  normalizedLicensePlate String
+  location               String
+  timestamp              DateTime
+  vehicleImageObjectId   String?
+  plateImageObjectId     String?
+  reason                 String?
+  notificationSent       Boolean            @default(false)
+  notificationStatus     NotificationStatus @default(PENDING)
+  createdAt              DateTime           @default(now())
+  passage                Passage            @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  camera                 Camera             @relation(fields: [cameraId], references: [id], onDelete: Restrict)
+  group                  PlateGroup         @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  notifications          Notification[]
+
+  @@index([timestamp])
+  @@index([normalizedLicensePlate])
+  @@index([cameraId])
+  @@index([groupId])
+}
+
+model Notification {
+  id          String             @id @default(uuid()) @db.Uuid
+  hitId       String             @db.Uuid
+  recipientId String?            @db.Uuid
+  channel     String
+  status      NotificationStatus @default(PENDING)
+  sentAt      DateTime?
+  error       String?
+  createdAt   DateTime           @default(now())
+  hit         Hit                @relation(fields: [hitId], references: [id], onDelete: Cascade)
+
+  @@index([hitId])
+  @@index([recipientId, status])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  objectType String?
+  objectId   String?
+  ipAddress  String?
+  oldValue   Json?
+  newValue   Json?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([objectType, objectId])
+}
+
+model SystemSetting {
+  key         String   @id
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model RetentionException {
+  id                String   @id @default(uuid()) @db.Uuid
+  passageId         String   @db.Uuid
+  userId            String   @db.Uuid
+  reason            String
+  originalExpiresAt DateTime
+  newExpiresAt      DateTime
+  createdAt         DateTime @default(now())
+  passage           Passage  @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([passageId])
+  @@index([newExpiresAt])
+}

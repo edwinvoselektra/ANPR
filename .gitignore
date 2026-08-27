@@ -1,0 +1,34 @@
+# Secrets (keep the documented example)
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+
+# Runtime data: never commit camera media, databases or logs
+storage/*
+!storage/.gitkeep
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+logs/
+snapshots/
+captures/
+plate-images/
+
+# Local tooling and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+!.vscode/extensions.json
+.agents/
+.codex/

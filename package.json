@@ -1,0 +1,18 @@
+{
+  "name": "anpr-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build": "npm run build -w @anpr/shared && npm run build -w @anpr/api && npm run build -w @anpr/web",
+    "typecheck": "npm run build -w @anpr/shared && npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run build -w @anpr/shared && npm run test --workspaces --if-present",
+    "db:generate": "npm run db:generate -w @anpr/database",
+    "db:validate": "npm run db:validate -w @anpr/database",
+    "db:migrate": "npm run db:migrate -w @anpr/database",
+    "db:seed": "npm run db:seed -w @anpr/database",
+    "admin:create": "npm run admin:create -w @anpr/database"
+  },
+  "engines": { "node": ">=22.0.0", "npm": ">=10.0.0" }
+}
