@@ -1,16 +1,20 @@
 export class ApiError extends Error {
-  constructor(message: string, public status: number, public fields?: Record<string, string[]>) { super(message); }
+  constructor(message: string, public status: number, public fields?: Record<string, string[]>, public code?: string) { super(message); }
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (typeof options.body === "string" && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   const response = await fetch(`/api${path}`, {
     ...options,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...options.headers }
+    headers
   });
   if (response.status === 204) return undefined as T;
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new ApiError(data.message ?? "De aanvraag is mislukt.", response.status, data.fields);
+  if (!response.ok) throw new ApiError(data.message ?? "De aanvraag is mislukt.", response.status, data.fields, data.error);
   return data as T;
 }
 

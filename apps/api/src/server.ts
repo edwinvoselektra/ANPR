@@ -27,10 +27,26 @@ export function buildServer() {
       if (origin && origin !== config.WEB_ORIGIN) return reply.code(403).send({ error: "INVALID_ORIGIN", message: "Ongeldige aanvraagbron." });
     }
   });
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
+    const candidateCode = typeof error === "object" && error !== null && "code" in error
+      ? (error as { code?: unknown }).code : undefined;
+    if (candidateCode === "FST_ERR_CTP_EMPTY_JSON_BODY" || candidateCode === "FST_ERR_CTP_INVALID_JSON_BODY") {
+      return reply.code(400).send({ error: "INVALID_JSON", message: "De aanvraag bevat geen geldige gegevens. Probeer het opnieuw." });
+    }
     if (error instanceof ZodError) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Controleer de ingevulde gegevens.", fields: error.flatten().fieldErrors });
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === "P2002") return reply.code(409).send({ error: "DUPLICATE", message: "Deze waarde bestaat al." });
+      if (error.code === "P2002") {
+        const target = error.meta?.target;
+        const targetsName = Array.isArray(target) ? target.includes("name") : typeof target === "string" && target.includes("name");
+        if (request.url.startsWith("/cameras") && targetsName) {
+          const message = "Er bestaat al een camera met deze naam. Kies een andere cameranaam of bewerk de bestaande camera.";
+          return reply.code(409).send({ error: "CAMERA_NAME_ALREADY_EXISTS", message, fields: { name: [message] } });
+        }
+        return reply.code(409).send({ error: "DUPLICATE", message: "Deze waarde bestaat al." });
+      }
+      if (error.code === "P2003" && request.method === "DELETE" && request.url.startsWith("/cameras/")) {
+        return reply.code(409).send({ error: "CAMERA_HAS_HISTORY", message: "Deze camera heeft historische passages of hits en kan voor behoud van historie alleen worden uitgeschakeld." });
+      }
       if (error.code === "P2025") return reply.code(404).send({ error: "NOT_FOUND", message: "Het gevraagde onderdeel bestaat niet." });
     }
     const candidateStatus = typeof error === "object" && error !== null && "statusCode" in error

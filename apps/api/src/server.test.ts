@@ -18,4 +18,12 @@ describe("API integratie", () => {
     const response = await app.inject({ method: "GET", url: "/users" });
     expect(response.statusCode).toBe(401);
   });
+
+  it("geeft bij een lege JSON-body geen rauwe Fastify-fout terug", async () => {
+    app = buildServer();
+    const response = await app.inject({ method: "POST", url: "/cameras/camera-id/test", headers: { "content-type": "application/json" } });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "INVALID_JSON", message: "De aanvraag bevat geen geldige gegevens. Probeer het opnieuw." });
+    expect(response.body).not.toContain("Body cannot be empty");
+  });
 });

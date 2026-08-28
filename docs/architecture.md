@@ -136,6 +136,13 @@ CameraZones bewaren genormaliseerde JSON-coördinaten (0–1) voor rechthoek of 
 De wizard kan de zone over een echte snapshot tekenen. Camerastatus wordt afgeleid uit
 actiefstatus, laatste testresultaat en offline-timeout.
 
+Camera-delete is idempotent: een bestaande camera zonder historie en zijn versleutelde
+credentials worden als één databaserij verwijderd; een reeds ontbrekende UUID geeft
+eveneens HTTP 204. CameraZones mogen daarbij cascaderen. Passages en Hits gebruiken
+`Restrict` en blokkeren fysieke verwijdering, zodat historische registraties nooit
+onbedoeld verdwijnen. Het cameraoverzicht gebruikt geen gecachte API-respons en verwijdert
+een succesvol verwijderde camera direct uit de lokale UI-state.
+
 ## 9. RTSP-test en snapshot
 
 De API bouwt de RTSP-URL uitsluitend in geheugen op en start FFmpeg met een argumenten-

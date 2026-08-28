@@ -40,14 +40,20 @@ const updateBody = z.object({
 });
 
 export async function cameraRoutes(app: FastifyInstance) {
-  app.get("/cameras", { preHandler: requirePermission(PERMISSIONS.CAMERAS_VIEW) }, async () => {
+  app.get("/cameras", { preHandler: requirePermission(PERMISSIONS.CAMERAS_VIEW) }, async (_request, reply) => {
     const cameras = await prisma.camera.findMany({ include: { zones: true, _count: { select: { passages: { where: { timestamp: { gte: new Date(Date.now() - 86_400_000) } } } } } }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }] });
-    return { cameras: cameras.map(publicCamera) };
+    return reply.header("Cache-Control", "private, no-store").send({ cameras: cameras.map(publicCamera) });
   });
 
   app.get("/cameras/:id", { preHandler: requirePermission(PERMISSIONS.CAMERAS_VIEW) }, async (request) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     return { camera: publicCamera(await prisma.camera.findUniqueOrThrow({ where: { id }, include: { zones: true } })) };
+  });
+
+  app.get("/cameras/name-availability", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request) => {
+    const { name } = z.object({ name: z.string().trim().min(2).max(100) }).parse(request.query);
+    const camera = await prisma.camera.findUnique({ where: { name }, select: { id: true } });
+    return { available: camera === null };
   });
 
   app.post("/cameras", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request, reply) => {
@@ -101,9 +107,13 @@ export async function cameraRoutes(app: FastifyInstance) {
 
   app.delete("/cameras/:id", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const camera = await prisma.camera.findUniqueOrThrow({ where: { id }, include: { _count: { select: { passages: true } } } });
-    if (camera._count.passages > 0) return reply.code(409).send({ error: "CAMERA_HAS_PASSAGES", message: "Deze camera heeft passages en kan voor behoud van historie alleen worden uitgeschakeld." });
-    await prisma.camera.delete({ where: { id } });
+    const camera = await prisma.camera.findUnique({ where: { id }, include: { _count: { select: { passages: true, hits: true } } } });
+    if (!camera) return reply.code(204).send();
+    if (camera._count.passages > 0 || camera._count.hits > 0) {
+      return reply.code(409).send({ error: "CAMERA_HAS_HISTORY", message: "Deze camera heeft historische passages of hits en kan voor behoud van historie alleen worden uitgeschakeld." });
+    }
+    const deleted = await prisma.camera.deleteMany({ where: { id } });
+    if (deleted.count === 0) return reply.code(204).send();
     await audit(request, "CAMERA_DELETED", { objectType: "Camera", objectId: id, oldValue: publicCamera(camera) });
     return reply.code(204).send();
   });

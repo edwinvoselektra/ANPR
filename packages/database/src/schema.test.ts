@@ -12,4 +12,11 @@ describe("Prisma-datamodel", () => {
     expect(schema).not.toMatch(/Bytes/);
     expect(schema).toContain("vehicleImage1ObjectId");
   });
+  it("houdt de cameranaam uniek op databaseniveau", () => {
+    expect(schema).toMatch(/model Camera \{[\s\S]*?name\s+String\s+@unique/);
+  });
+  it("beschermt historische passages en hits tegen cascade-delete van een camera", () => {
+    expect(schema).toMatch(/model Passage \{[\s\S]*?camera\s+Camera\s+@relation\([^\n]*onDelete: Restrict\)/);
+    expect(schema).toMatch(/model Hit \{[\s\S]*?camera\s+Camera\s+@relation\([^\n]*onDelete: Restrict\)/);
+  });
 });
