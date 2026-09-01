@@ -15,13 +15,21 @@ const schema = z.object({
 export async function simulatorRoutes(app: FastifyInstance) {
   app.get("/simulator", { preHandler: requirePermission(PERMISSIONS.SIMULATOR_RUN) }, async () => ({
     enabled: config.DEMO_MODE,
-    cameras: config.DEMO_MODE ? await prisma.camera.findMany({ where: { name: { in: ["Uddel Noord", "Uddel Oost", "Uddel West"] } }, select: { id: true, name: true, location: true } }) : []
+    // Dynamisch uit de echte cameradatabase: elke actieve camera is beschikbaar, ook
+    // handmatig toegevoegde; uitgeschakelde camera's zijn niet selecteerbaar.
+    cameras: config.DEMO_MODE ? await prisma.camera.findMany({
+      where: { active: true },
+      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, location: true }
+    }) : []
   }));
 
   app.post("/simulator/passages", { preHandler: requirePermission(PERMISSIONS.SIMULATOR_RUN) }, async (request, reply) => {
     if (!config.DEMO_MODE) return reply.code(404).send({ error: "DEMO_DISABLED", message: "De demo/simulator is uitgeschakeld." });
     const body = schema.parse(request.body);
-    const camera = await prisma.camera.findUniqueOrThrow({ where: { id: body.cameraId } });
+    const camera = await prisma.camera.findUnique({ where: { id: body.cameraId } });
+    if (!camera) return reply.code(404).send({ error: "CAMERA_NOT_FOUND", message: "De gekozen camera bestaat niet (meer). Ververs de camerakeuze." });
+    if (!camera.active) return reply.code(400).send({ error: "CAMERA_INACTIVE", message: "De gekozen camera is uitgeschakeld en kan niet worden gebruikt voor een demopassage." });
     const normalized = normalizeLicensePlate(body.licensePlate);
     const groupMember = await prisma.plateGroupMember.findFirst({
       where: { normalizedLicensePlate: normalized, active: true, group: { active: true } },
