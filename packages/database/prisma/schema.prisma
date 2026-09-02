@@ -35,6 +35,21 @@ enum PassageSource {
   DEMO
   ANPR
   MANUAL
+  DAHUA_CAMERA
+  SERVER_OCR
+}
+
+enum CameraAnprProvider {
+  NONE
+  DAHUA_CGI
+}
+
+enum AnprConnectionStatus {
+  DISABLED
+  CONNECTING
+  CONNECTED
+  DISCONNECTED
+  ERROR
 }
 
 enum PassageStatus {
@@ -170,6 +185,16 @@ model Camera {
   lastVehicleRegistrationAt DateTime?
   lastSnapshotObjectId     String?
   active                   Boolean              @default(false)
+  anprProvider             CameraAnprProvider   @default(NONE)
+  anprHttpProtocol         String               @default("http")
+  anprHttpPort             Int                  @default(80)
+  anprChannel              Int                  @default(1)
+  anprConnectionStatus     AnprConnectionStatus @default(DISABLED)
+  lastAnprConnectionAt     DateTime?
+  lastAnprEventAt          DateTime?
+  lastAnprErrorCode        String?
+  lastAnprError            String?
+  capabilities             Json?
   anprSettings             Json?
   vehicleDetectionSettings Json?
   latitude                 Decimal?             @db.Decimal(9, 6)
@@ -213,12 +238,17 @@ model Passage {
   vehicleColor           VehicleColor    @default(UNKNOWN)
   vehicleType            VehicleType     @default(UNKNOWN)
   vehicleConfidence      Float?
+  vehicleBrand           String?
+  plateCountry           String?
+  lane                   Int?
   vehicleImage1ObjectId  String?
   vehicleImage2ObjectId  String?
   plateImageObjectId     String?
   isHit                  Boolean         @default(false)
   status                 PassageStatus   @default(ACTIVE)
   source                 PassageSource   @default(ANPR)
+  sourceEventId          String?
+  rawEventMetadata       Json?
   trackId                String?
   expiresAt              DateTime
   createdAt              DateTime        @default(now())
@@ -236,6 +266,7 @@ model Passage {
   @@index([vehicleType])
   @@index([isHit, timestamp])
   @@index([expiresAt])
+  @@unique([cameraId, source, sourceEventId])
 }
 
 model Vehicle {

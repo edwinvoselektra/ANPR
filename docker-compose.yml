@@ -44,6 +44,13 @@ services:
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       STORAGE_PATH: ${STORAGE_PATH:-/app/storage}
       API_PORT: 4000
+      ANPR_WORKER_PORT: ${ANPR_WORKER_PORT:-4200}
+      ANPR_CAMERA_REFRESH_SECONDS: ${ANPR_CAMERA_REFRESH_SECONDS:-10}
+      ANPR_RECONNECT_MIN_SECONDS: ${ANPR_RECONNECT_MIN_SECONDS:-2}
+      ANPR_RECONNECT_MAX_SECONDS: ${ANPR_RECONNECT_MAX_SECONDS:-60}
+      ANPR_CONNECT_TIMEOUT_SECONDS: ${ANPR_CONNECT_TIMEOUT_SECONDS:-10}
+      ANPR_DEDUPE_WINDOW_SECONDS: ${ANPR_DEDUPE_WINDOW_SECONDS:-3}
+      ANPR_MAX_IMAGE_BYTES: ${ANPR_MAX_IMAGE_BYTES:-8000000}
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,6 +101,27 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  anpr-worker:
+    build:
+      context: .
+      dockerfile: apps/anpr-worker/Dockerfile
+      target: development
+    command: ["npm", "run", "dev", "-w", "@anpr/anpr-worker"]
+    environment: *api-environment
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4200/health"]
       interval: 10s
       timeout: 5s
       retries: 10

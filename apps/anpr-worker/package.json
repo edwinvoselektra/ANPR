@@ -1,0 +1,29 @@
+{
+  "name": "@anpr/anpr-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings=0",
+    "test": "CAMERA_CREDENTIALS_KEY=0000000000000000000000000000000000000000000000000000000000000000 DATABASE_URL=postgresql://test:test@localhost:5432/test REDIS_URL=redis://localhost:6379 vitest run"
+  },
+  "dependencies": {
+    "@anpr/shared": "*",
+    "@prisma/client": "6.12.0",
+    "ioredis": "5.6.1",
+    "zod": "3.25.67"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.28.0",
+    "@types/node": "22.15.30",
+    "eslint": "9.28.0",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.34.0",
+    "vitest": "3.2.7"
+  }
+}

@@ -4,7 +4,8 @@ Een webbased ANPR-platform voor buurtpreventie. Fase 1 levert werkend gebruikers
 camerabeheer, veilige authenticatie, een dashboard, echte RTSP/FFmpeg-verbindingstests
 en een duidelijk gemarkeerde demo/simulator. Fase 2.1 voegt een zelfstandige
 video-worker toe die actieve camera's bewaakt en begrensd echte testframes ophaalt.
-Kentekenherkenning/OCR is nog niet geïmplementeerd.
+Fase 2.2 voegt optionele Dahua-camera-ANPR-inname, echte passageopslag en het scherm
+**Live passages** toe. Server-side OCR blijft een latere provider.
 
 > **Belangrijk:** demo-passages zijn geen echte ANPR-detecties. De interface toont ze
 > altijd met bron `DEMO`.
@@ -98,10 +99,10 @@ Opnieuw starten:
 docker compose restart
 ```
 
-Logs volgen, inclusief de video-worker:
+Logs volgen, inclusief beide workers:
 
 ```bash
-docker compose logs -f web api video-worker postgres redis
+docker compose logs -f web api video-worker anpr-worker postgres redis
 ```
 
 Stop het volgen van logs met `Ctrl+C`; de containers blijven draaien.
@@ -115,7 +116,8 @@ Stop het volgen van logs met `Ctrl+C`; de containers blijven draaien.
 5. Klik **Verbinding testen**. De API gebruikt echt `ffprobe` en probeert één snapshot
    met FFmpeg te maken.
 6. Teken eventueel een rechthoek op de snapshot.
-7. De ANPR-test is eerlijk gemarkeerd als TODO voor Fase 2.
+7. Kies bij een compatibele Dahua-camera eventueel **Dahua CGI TrafficJunction**,
+   plus de HTTP(S)-poort en het camerakanaal. Laat dit anders uitgeschakeld.
 8. Controleer het overzicht en sla de camera op.
 
 Camera-credentials worden met AES-256-GCM versleuteld opgeslagen. De browser krijgt
@@ -163,14 +165,46 @@ Readiness van PostgreSQL, Redis, storage en FFmpeg:
 curl http://localhost:4000/health/ready
 ```
 
-De video-worker publiceert een echte heartbeat en staat als Online/Offline op de
-beveiligde pagina **Systeemstatus**. De ANPR-worker blijft bewust `not_implemented`.
+De video-worker en ANPR-worker publiceren ieder een eigen heartbeat en staan los van
+elkaar op de beveiligde pagina **Systeemstatus**.
 
 Interne liveness van de video-worker controleer je via Docker:
 
 ```bash
 docker compose exec video-worker wget -qO- http://127.0.0.1:4100/health
 ```
+
+Interne liveness van de ANPR-worker:
+
+```bash
+docker compose exec anpr-worker wget -qO- http://127.0.0.1:4200/health
+```
+
+## Fase 2.2 Dahua ANPR-events testen
+
+De provider is ingericht voor Dahua's `TrafficJunction` multipart-snapshot-eventstream.
+De officiële publiek toegankelijke productdocumentatie bevestigt de benodigde
+interfaces, maar bevat niet de volledige event-wire-specificatie. Endpoint, velden en
+afbeeldingsvolgorde moeten daarom één keer met de echte ITC413-firmware worden gecontroleerd.
+
+1. Open **Camera’s**, kies de echte camera en klik **Bewerken**.
+2. Kies bij **ANPR-provider**: **Dahua CGI TrafficJunction**.
+3. Kies `HTTP` en poort `80`, tenzij de webinterface van jouw camera aantoonbaar via
+   HTTPS of een andere poort draait. Laat **Dahua-kanaal** eerst op `1`.
+4. Laat gebruikersnaam en wachtwoord leeg als de bestaande RTSP-inloggegevens ook voor
+   de camerawebinterface gelden; de versleutelde waarden blijven dan behouden.
+5. Sla op en open **Systeemstatus**. ANPR-events hoort `CONNECTED` te worden.
+6. Open **Live passages** en laat veilig één voertuig passeren. Binnen enkele seconden
+   hoort de passage bovenaan te staan.
+7. Open de passage en controleer kenteken, camera, tijd en beschikbare foto’s.
+
+Veilige workerlogs volgen:
+
+```bash
+docker compose logs -f anpr-worker
+```
+
+De logs tonen geen wachtwoord en redigeren kentekens. Stop volgen met `Ctrl+C`.
 
 ## Fase 2.1 video-worker handmatig testen
 
@@ -223,14 +257,17 @@ Voer na wijzigingen exact uit:
 ```bash
 docker compose run --rm api npm run build -w @anpr/api
 docker compose run --rm video-worker npm run build -w @anpr/video-worker
+docker compose run --rm anpr-worker npm run build -w @anpr/anpr-worker
 docker compose run --rm web npm run build -w @anpr/web
 docker compose run --rm api npm run typecheck -w @anpr/database
 docker compose run --rm api npm run lint -w @anpr/api
 docker compose run --rm video-worker npm run lint -w @anpr/video-worker
+docker compose run --rm anpr-worker npm run lint -w @anpr/anpr-worker
 docker compose run --rm web npm run lint -w @anpr/web
 docker compose run --rm api npm run lint -w @anpr/shared
 docker compose run --rm api npm run test -w @anpr/api
 docker compose run --rm video-worker npm run test -w @anpr/video-worker
+docker compose run --rm anpr-worker npm run test -w @anpr/anpr-worker
 docker compose run --rm api npm run test -w @anpr/database
 docker compose run --rm api npm run test -w @anpr/shared
 docker compose run --rm web npm run test -w @anpr/web
@@ -295,9 +332,10 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 - [Architectuur](docs/architecture.md)
 - [Resultaat Fase 1](docs/PHASE1-RESULT.md)
 - [Resultaat Fase 2.1](docs/PHASE2.1-RESULT.md)
+- [Resultaat Fase 2.2](docs/PHASE2.2-RESULT.md)
 
 ## Volgende fase
 
-Na handmatige goedkeuring van Fase 2.1 kan een afzonderlijke volgende stap tracking,
-frame-selectie en de verwisselbare `ANPRProvider` ontwerpen. Deze onderdelen worden
-niet automatisch gestart.
+Na handmatige goedkeuring van Fase 2.2 kan een volgende, afzonderlijk afgesproken fase
+verder bouwen op passages. Pushmeldingen, volledige watchlists en server-OCR zijn niet
+automatisch gestart.

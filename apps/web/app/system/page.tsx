@@ -11,6 +11,11 @@ type CameraStatus = {
   lastConnectionAt?: string | null;
   lastConnectionSuccessAt?: string | null;
   lastConnectionErrorCode?: string | null;
+  anprProvider: string;
+  anprConnectionStatus: string;
+  lastAnprConnectionAt?: string | null;
+  lastAnprEventAt?: string | null;
+  lastAnprErrorCode?: string | null;
 };
 type Status = {
   services: Record<string, { status: string; message?: string }>;
@@ -49,8 +54,8 @@ export default function System() {
     {error && <div className="alert error">{error}</div>}
     {!data && !error ? <div className="loading"><span className="spinner"/>Status controleren…</div> : data && <>
       <div className="cards">{Object.entries(data.services).map(([name, item]) => <div className="metric" key={name}><span>{name}</span><strong style={{ fontSize: 16 }}>{item.status === "healthy" ? "Online" : item.status === "not_implemented" ? "TODO" : "Offline"}</strong><div><span className={`badge ${item.status === "healthy" ? "green" : item.status === "not_implemented" ? "amber" : "red"}`}>{item.status}</span></div>{item.message && <small style={{ color: "var(--muted)", display: "block", marginTop: 7 }}>{item.message}</small>}</div>)}</div>
-      <section className="card" style={{ marginTop: 20 }}><h2>Camerastatus via video-worker</h2><p className="subtitle">Alle camera’s komen rechtstreeks uit PostgreSQL; namen zijn niet hardcoded.</p><div className="status-list">{data.cameras.map((camera) => <div className="status-row" key={camera.id}><div><strong>{camera.name}</strong><small>{camera.location}</small></div><span className={`badge ${camera.status === "ONLINE" ? "green" : camera.status === "DISABLED" ? "gray" : "red"}`}>{labels[camera.status] ?? camera.status}</span></div>)}{data.cameras.length === 0 && <p>Er zijn nog geen camera’s opgeslagen.</p>}</div></section>
+      <section className="card" style={{ marginTop: 20 }}><h2>Cameraverbindingen</h2><p className="subtitle">RTSP en ANPR-events zijn afzonderlijke verbindingen. Alle camera’s komen rechtstreeks uit PostgreSQL.</p><div className="table-wrap"><table><thead><tr><th>Camera</th><th>RTSP</th><th>ANPR-events</th><th>Laatste ANPR-event</th></tr></thead><tbody>{data.cameras.map((camera) => <tr key={camera.id}><td><strong>{camera.name}</strong><small style={{display:"block",color:"var(--muted)"}}>{camera.location}</small></td><td><span className={`badge ${camera.status === "ONLINE" ? "green" : camera.status === "DISABLED" ? "gray" : "red"}`}>{labels[camera.status] ?? camera.status}</span></td><td>{camera.anprProvider==="NONE"?<span className="badge gray">Uitgeschakeld</span>:<span className={`badge ${camera.anprConnectionStatus==="CONNECTED"?"green":camera.anprConnectionStatus==="CONNECTING"?"amber":"red"}`}>{camera.anprConnectionStatus}</span>}</td><td>{camera.lastAnprEventAt?new Intl.DateTimeFormat("nl-NL",{dateStyle:"short",timeStyle:"medium"}).format(new Date(camera.lastAnprEventAt)):"Nog niet"}</td></tr>)}{data.cameras.length === 0 && <tr><td colSpan={4}>Er zijn nog geen camera’s opgeslagen.</td></tr>}</tbody></table></div></section>
     </>}
-    <div className="alert info">De video-worker verwerkt in Fase 2.1 alleen begrensde testframes. ANPR/OCR blijft bewust <strong>TODO voor Fase 2.2</strong>.</div>
+    <div className="alert info">De video-worker controleert RTSP onafhankelijk. De ANPR-worker ontvangt alleen events van camera’s waarvoor een ANPR-provider expliciet is ingeschakeld.</div>
   </>;
 }

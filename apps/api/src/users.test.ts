@@ -203,6 +203,22 @@ describe("rollen en uitschakelen", () => {
     expect(prismaMock.userRole.createMany).not.toHaveBeenCalled();
   });
 
+  it("voorkomt dat een administrator zijn eigen rol wijzigt, ook als een andere admin actief is", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(targetAdmin({ id: ADMIN_ID }));
+    prismaMock.user.findMany.mockResolvedValue([{ id: ADMIN_ID }, { id: TARGET_ID }]);
+    app = buildServer();
+
+    const response = await app.inject({ method: "PATCH", url: `/users/${ADMIN_ID}`, payload: { roleIds: [OPERATOR_ROLE_ID] } });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "SELF_ROLE_CHANGE",
+      message: "Je kunt je eigen rol niet wijzigen. Laat een andere administrator dit doen."
+    });
+    expect(prismaMock.userRole.deleteMany).not.toHaveBeenCalled();
+    expect(prismaMock.userRole.createMany).not.toHaveBeenCalled();
+  });
+
   it("blokkeert degradatie van de laatste actieve administrator naar Operator", async () => {
     prismaMock.user.findUnique.mockResolvedValue(targetAdmin());
     prismaMock.user.findMany.mockResolvedValue([{ id: TARGET_ID }]);

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "build": "npm run build -w @anpr/shared && npm run build -w @anpr/api && npm run build -w @anpr/video-worker && npm run build -w @anpr/web",
+    "build": "npm run build -w @anpr/shared && npm run build -w @anpr/api && npm run build -w @anpr/video-worker && npm run build -w @anpr/anpr-worker && npm run build -w @anpr/web",
     "typecheck": "npm run build -w @anpr/shared && npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run build -w @anpr/shared && npm run test --workspaces --if-present",

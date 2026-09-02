@@ -1,0 +1,8 @@
+import { describe, expect, it, vi } from "vitest";
+import { DahuaAnprProvider } from "./dahua.js";
+import type { ManagedAnprCamera } from "../types.js";
+
+const camera:ManagedAnprCamera={id:"11111111-1111-4111-8111-111111111111",name:"TEST Dahua",location:"TEST",direction:"INCOMING",rtspHost:"192.0.2.20",rtspUsernameEncrypted:null,rtspPasswordEncrypted:null,anprProvider:"DAHUA_CGI",anprHttpProtocol:"http",anprHttpPort:80,anprChannel:1,updatedAt:new Date()};
+describe("Dahua provider adapter",()=>{
+  it("bouwt alleen de vaste gedocumenteerde stream en koppelt het event aan de databasecamera",async()=>{const openStream=vi.fn().mockResolvedValue({});const consume=vi.fn(async(_response:any,options:any)=>{await options.onPart({headers:{"content-type":"text/plain"},body:Buffer.from("Events[0].Code=TrafficJunction\r\nEvents[0].Action=Pulse\r\nEvents[0].GroupID=TEST-22\r\nEvents[0].PTS=12345\r\nEvents[0].Object.Text=12-ABC-3")})});const onConnected=vi.fn();const onEvent=vi.fn();const provider=new DahuaAnprProvider({keyHex:"0".repeat(64),timeoutMs:1000,maxPartBytes:1000,settleMs:0,logger:{info:vi.fn(),warn:vi.fn(),error:vi.fn()},openStream,consume});await provider.connect(camera,{onConnected,onEvent},new AbortController().signal);expect(openStream).toHaveBeenCalledWith(expect.objectContaining({host:"192.0.2.20",port:80,path:"/cgi-bin/snapManager.cgi?action=attachFileProc&channel=1&heartbeat=5&Flags[0]=Event&Events=[TrafficJunction]"}));expect(onConnected).toHaveBeenCalledOnce();expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({cameraId:camera.id,normalizedPlate:"12ABC3",sourceEventId:"TEST-22:12345"}))});
+});

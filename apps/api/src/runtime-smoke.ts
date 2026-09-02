@@ -46,6 +46,7 @@ try {
   await expectStatus("GET", "/auth/me", adminCookie, 200);
   await expectStatus("GET", "/dashboard", adminCookie, 200);
   await expectStatus("GET", "/cameras", adminCookie, 200);
+  await expectStatus("GET", "/passages", adminCookie, 200);
   await expectStatus("GET", "/users", adminCookie, 200);
   const simulator = await app.inject({ method: "GET", url: "/simulator", headers: { cookie: adminCookie } });
   if (simulator.statusCode !== 200 || !simulator.json().cameras[0]) throw new Error("Simulator heeft geen demo-camera.");
@@ -71,7 +72,8 @@ try {
   createdCameraIds.splice(createdCameraIds.indexOf(cameraId), 1);
   await expectStatus("POST", "/cameras", viewerCookie, 403);
   await expectStatus("GET", "/cameras", viewerCookie, 200);
-  console.log("Runtime-smoketest geslaagd: login, sessies, dashboard, camera CRUD, RTSP-fouttest, simulator en Viewer-RBAC.");
+  await expectStatus("GET", "/passages", viewerCookie, 200);
+  console.log("Runtime-smoketest geslaagd: login, sessies, dashboard, camera CRUD, RTSP-fouttest, simulator, passages en Viewer-RBAC.");
 } finally {
   await app.close();
   await prisma.hit.deleteMany({ where: { passageId: { in: createdPassageIds } } });

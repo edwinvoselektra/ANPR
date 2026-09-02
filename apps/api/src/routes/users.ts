@@ -90,6 +90,8 @@ export async function userRoutes(app: FastifyInstance) {
     if (!target) return reply.code(404).send({ error: "USER_NOT_FOUND", message: "Gebruiker niet gevonden." });
     if (id === request.authUser!.id && body.active === false)
       return reply.code(400).send({ error: "SELF_DISABLE", message: "Je kunt je eigen account niet uitschakelen." });
+    if (id === request.authUser!.id && body.roleIds)
+      return reply.code(400).send({ error: "SELF_ROLE_CHANGE", message: "Je kunt je eigen rol niet wijzigen. Laat een andere administrator dit doen." });
 
     let chosenRoles: RoleRecord[] | undefined;
     if (body.roleIds) {

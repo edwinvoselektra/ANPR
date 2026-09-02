@@ -19,4 +19,10 @@ describe("Prisma-datamodel", () => {
     expect(schema).toMatch(/model Passage \{[\s\S]*?camera\s+Camera\s+@relation\([^\n]*onDelete: Restrict\)/);
     expect(schema).toMatch(/model Hit \{[\s\S]*?camera\s+Camera\s+@relation\([^\n]*onDelete: Restrict\)/);
   });
+  it("ondersteunt providerstatus, Dahua-bron en idempotente events", () => {
+    expect(schema).toContain("enum CameraAnprProvider");
+    expect(schema).toContain("DAHUA_CAMERA");
+    expect(schema).toContain("anprConnectionStatus");
+    expect(schema).toContain("@@unique([cameraId, source, sourceEventId])");
+  });
 });

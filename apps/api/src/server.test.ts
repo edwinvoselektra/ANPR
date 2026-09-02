@@ -19,6 +19,14 @@ describe("API integratie", () => {
     expect(response.statusCode).toBe(401);
   });
 
+  it("beschermt live passages en passagefoto's met authenticatie/RBAC", async () => {
+    app = buildServer();
+    const list = await app.inject({ method: "GET", url: "/passages" });
+    const image = await app.inject({ method: "GET", url: "/passages/11111111-1111-4111-8111-111111111111/image/overview" });
+    expect(list.statusCode).toBe(401);
+    expect(image.statusCode).toBe(401);
+  });
+
   it("geeft bij een lege JSON-body geen rauwe Fastify-fout terug", async () => {
     app = buildServer();
     const response = await app.inject({ method: "POST", url: "/cameras/camera-id/test", headers: { "content-type": "application/json" } });

@@ -26,7 +26,10 @@ const cameraBody = connection.and(z.object({
   direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]), latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
   longitude: z.coerce.number().min(-180).max(180).nullable().optional(), active: z.boolean().default(false),
   displayOrder: z.coerce.number().int().min(0).max(10_000).default(0), offlineTimeoutSeconds: z.coerce.number().int().min(30).max(86_400).default(120),
-  zone: zone.optional()
+  zone: zone.optional(), anprProvider: z.enum(["NONE", "DAHUA_CGI"]).default("NONE"),
+  anprHttpProtocol: z.enum(["http", "https"]).default("http"),
+  anprHttpPort: z.coerce.number().int().min(1).max(65535).default(80),
+  anprChannel: z.coerce.number().int().min(1).max(64).default(1)
 }));
 const updateBody = z.object({
   name: z.string().trim().min(2).max(100).optional(), location: z.string().trim().min(2).max(150).optional(),
@@ -37,7 +40,13 @@ const updateBody = z.object({
   connectionMode: z.enum(["URL", "FIELDS"]).optional(), rtspUrl: z.string().max(2048).optional(),
   rtspHost: z.string().max(253).optional(), rtspPort: z.coerce.number().int().min(1).max(65535).optional(),
   rtspPath: z.string().max(1000).optional(), username: z.string().max(200).optional(), password: z.string().max(500).optional()
+  , anprProvider: z.enum(["NONE", "DAHUA_CGI"]).optional(), anprHttpProtocol: z.enum(["http", "https"]).optional(),
+  anprHttpPort: z.coerce.number().int().min(1).max(65535).optional(), anprChannel: z.coerce.number().int().min(1).max(64).optional()
 });
+
+function capabilities(provider: "NONE" | "DAHUA_CGI") {
+  return { rtsp: true, snapshot: true, cameraAnpr: provider !== "NONE", eventStream: provider !== "NONE", plateCrop: provider !== "NONE", vehicleMetadata: provider !== "NONE" };
+}
 
 export async function cameraRoutes(app: FastifyInstance) {
   app.get("/cameras", { preHandler: requirePermission(PERMISSIONS.CAMERAS_VIEW) }, async (_request, reply) => {
@@ -64,6 +73,9 @@ export async function cameraRoutes(app: FastifyInstance) {
       latitude: body.latitude, longitude: body.longitude, active: body.active,
       status: body.active ? "OFFLINE" : "DISABLED", displayOrder: body.displayOrder,
       offlineTimeoutSeconds: body.offlineTimeoutSeconds, ...connectionData,
+      anprProvider: body.anprProvider, anprHttpProtocol: body.anprHttpProtocol, anprHttpPort: body.anprHttpPort,
+      anprChannel: body.anprChannel, anprConnectionStatus: body.active && body.anprProvider !== "NONE" ? "CONNECTING" : "DISABLED",
+      capabilities: capabilities(body.anprProvider),
       zones: body.zone ? { create: { type: body.zone.type, points: body.zone.points } } : undefined
     }, include: { zones: true } });
     await audit(request, "CAMERA_CREATED", { objectType: "Camera", objectId: camera.id, newValue: publicCamera(camera) });
@@ -98,7 +110,12 @@ export async function cameraRoutes(app: FastifyInstance) {
         name: body.name, location: body.location, description: body.description, direction: body.direction,
         latitude: body.latitude, longitude: body.longitude, active: body.active,
         status: body.active === false ? "DISABLED" : body.active === true && current.status === "DISABLED" ? "OFFLINE" : undefined,
-        displayOrder: body.displayOrder, offlineTimeoutSeconds: body.offlineTimeoutSeconds, ...connectionData
+        displayOrder: body.displayOrder, offlineTimeoutSeconds: body.offlineTimeoutSeconds,
+        anprProvider: body.anprProvider, anprHttpProtocol: body.anprHttpProtocol, anprHttpPort: body.anprHttpPort, anprChannel: body.anprChannel,
+        anprConnectionStatus: body.active === false || body.anprProvider === "NONE" ? "DISABLED"
+          : body.anprProvider === "DAHUA_CGI" || body.active === true ? "CONNECTING" : undefined,
+        capabilities: body.anprProvider ? capabilities(body.anprProvider) : undefined,
+        ...connectionData
       }, include: { zones: true } });
     });
     await audit(request, "CAMERA_UPDATED", { objectType: "Camera", objectId: id, oldValue: publicCamera(current), newValue: publicCamera(camera) });

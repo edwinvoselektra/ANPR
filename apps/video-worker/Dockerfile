@@ -3,6 +3,7 @@ WORKDIR /app
 RUN apk add --no-cache ffmpeg
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/package.json
+COPY apps/anpr-worker/package.json apps/anpr-worker/package.json
 COPY apps/video-worker/package.json apps/video-worker/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/database/package.json packages/database/package.json

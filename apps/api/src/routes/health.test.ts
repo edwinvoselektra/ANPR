@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { videoWorkerStatus } from "./health.js";
+import { anprWorkerStatus, videoWorkerStatus } from "./health.js";
 
 describe("video-worker heartbeat", () => {
   const now = Date.parse("2026-09-01T12:00:00.000Z");
@@ -13,5 +13,14 @@ describe("video-worker heartbeat", () => {
     const stale = JSON.stringify({ timestamp: "2026-09-01T11:59:40.000Z", running: true, managedCameras: 4 });
     expect(videoWorkerStatus(stale, now).status).toBe("unhealthy");
     expect(videoWorkerStatus(null, now).status).toBe("unhealthy");
+  });
+});
+
+describe("ANPR-worker heartbeat", () => {
+  const now = Date.parse("2026-09-01T12:00:00.000Z");
+  it("rapporteert de ANPR-worker onafhankelijk van de video-worker", () => {
+    const raw = JSON.stringify({ timestamp: "2026-09-01T11:59:55.000Z", running: true, managedCameras: 1 });
+    expect(anprWorkerStatus(raw, now)).toEqual({ status: "healthy", message: "1 actieve camera in beheer." });
+    expect(anprWorkerStatus(null, now).status).toBe("unhealthy");
   });
 });

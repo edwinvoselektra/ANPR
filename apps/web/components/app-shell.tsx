@@ -3,16 +3,21 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { PERMISSIONS } from "@anpr/shared";
 import { api } from "@/lib/api";
 import { Icon } from "./icons";
 
 type User = { displayName: string; username: string; roles: string[]; permissions: string[] };
-const items = [
-  ["/", "dashboard", "Dashboard"], ["/cameras", "camera", "Camera’s"],
-  ["/users", "users", "Gebruikers", "users.manage"], ["/simulator", "demo", "Demo / simulator", "simulator.run"],
-  ["/system", "health", "Systeemstatus", "system.view"]
-] as const;
-const future = ["Live passages", "Live camera’s", "Hits", "Zoeken", "Kentekens", "Groepen", "Kaart", "Meldkamer", "Auditlog", "Instellingen"];
+type NavigationItem = { href: string; icon: string; label: string; permission?: string };
+const items: readonly NavigationItem[] = [
+  { href: "/", icon: "dashboard", label: "Dashboard" },
+  { href: "/passages", icon: "camera", label: "Live passages", permission: PERMISSIONS.PASSAGES_VIEW },
+  { href: "/cameras", icon: "camera", label: "Camera’s" },
+  { href: "/users", icon: "users", label: "Gebruikers", permission: PERMISSIONS.USERS_MANAGE },
+  { href: "/simulator", icon: "demo", label: "Demo / simulator", permission: PERMISSIONS.SIMULATOR_RUN },
+  { href: "/system", icon: "health", label: "Systeemstatus", permission: PERMISSIONS.SYSTEM_VIEW }
+];
+const future = ["Live camera’s", "Hits", "Zoeken", "Kentekens", "Groepen", "Kaart", "Meldkamer", "Auditlog", "Instellingen"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -31,8 +36,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <aside className={`sidebar ${open ? "open" : ""}`}>
       <div className="brand"><div className="brand-mark">A</div><div><strong>ANPR Platform</strong><span>Buurtpreventie</span></div></div>
       <nav aria-label="Hoofdnavigatie">
-        <div className="nav-label">Fase 1</div>
-        {items.filter((item) => !item[3] || user.permissions.includes(item[3])).map(([href, icon, label]) =>
+        <div className="nav-label">Platform</div>
+        {items.filter(({ permission }) => !permission || user.permissions.includes(permission)).map(({ href, icon, label }) =>
           <Link key={href} href={href} className={path === href || href !== "/" && path.startsWith(href) ? "active" : ""} onClick={() => setOpen(false)}><Icon name={icon}/>{label}</Link>)}
         <div className="nav-label">Toekomstige fases</div>
         {future.map((label) => <span className="nav-disabled" key={label}>{label}<small>Later</small></span>)}

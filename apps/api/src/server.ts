@@ -13,10 +13,11 @@ import { cameraRoutes } from "./routes/cameras.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { healthRoutes } from "./routes/health.js";
 import { simulatorRoutes } from "./routes/simulator.js";
+import { passageRoutes } from "./routes/passages.js";
 import { userRoutes } from "./routes/users.js";
 
 export function buildServer() {
-  const app = Fastify({ logger: { redact: ["req.headers.cookie", "req.body.password", "req.body.rtspUrl", "req.body.username"] }, bodyLimit: 1_048_576, trustProxy: true });
+  const app = Fastify({ logger: { redact: ["req.headers.cookie", "req.headers.authorization", "req.body.password", "req.body.rtspUrl", "req.body.username"] }, bodyLimit: 1_048_576, trustProxy: true });
   void app.register(cookie);
   void app.register(helmet, { contentSecurityPolicy: false });
   void app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
@@ -63,6 +64,7 @@ export function buildServer() {
   void app.register(cameraRoutes);
   void app.register(dashboardRoutes);
   void app.register(simulatorRoutes);
+  void app.register(passageRoutes);
   return app;
 }
 

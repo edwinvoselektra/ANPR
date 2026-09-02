@@ -70,6 +70,17 @@ describe("gebruikersbeheer interface", () => {
     expect(screen.queryByRole("button", { name: "Gebruiker Ik verwijderen" })).toBeNull();
     expect(screen.getByRole("button", { name: "Gebruiker Jan verwijderen" })).toBeTruthy();
   });
+
+  it("blokkeert rolwijziging en uitschakelen voor het eigen administratoraccount in de interface", async () => {
+    setupApi();
+    render(<Users />);
+    await screen.findByText("Ik");
+
+    expect((screen.getByLabelText("Rol van Ik") as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByText("Je kunt je eigen rol niet wijzigen.")).toBeTruthy();
+    const ownDisable = screen.getByTitle("Je kunt je eigen account niet uitschakelen.") as HTMLButtonElement;
+    expect(ownDisable.disabled).toBe(true);
+  });
 });
 
 describe("rollen en wachtwoord in de interface", () => {

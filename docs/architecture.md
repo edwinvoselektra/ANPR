@@ -1,6 +1,6 @@
 # Architectuur ANPR-platform
 
-Status: Fase 1 vastgesteld; aangevuld met de geïmplementeerde Fase 2.1 RTSP/video-workerbasis.
+Status: Fase 1 vastgesteld; aangevuld met Fase 2.1 RTSP/video-worker en het ontwerp voor Fase 2.2 Dahua ANPR-eventinname.
 
 ## 1. Doel en afbakening
 
@@ -48,7 +48,7 @@ Fase 1-pagina's:
 
 - dashboard;
 - cameraoverzicht en cameradetails;
-- camerawizard met algemene gegevens, verbinding, zone, ANPR-TODO en bevestiging;
+- camerawizard met algemene gegevens, verbinding, zone, optionele ANPR-provider en bevestiging;
 - gebruikersbeheer voor administrators;
 - demo/simulator;
 - systeemstatus.
@@ -174,9 +174,10 @@ in een persistent Docker-volume. Object-ID's zijn willekeurig en paden worden ni
 gebruikers bepaald. De API biedt snapshots alleen via een geauthenticeerd endpoint.
 NAS en S3-compatible providers kunnen later dezelfde interface implementeren.
 
-## 12. Toekomstige ANPR-providerarchitectuur
+## 12. ANPR-providerarchitectuur
 
-Een later package `anpr-provider` krijgt minimaal:
+Fase 2.2 implementeert eerst camera-eventproviders via `AnprEventProvider`. Een latere
+server-OCR-provider kan daarnaast de reeds voorziene beeldinterface gebruiken:
 
 ```ts
 interface ANPRProvider {
@@ -186,10 +187,10 @@ interface ANPRProvider {
 }
 ```
 
-Video-ingest publiceert jobs met storage-object-ID's naar Redis/BullMQ. Een afzonderlijke
-video-worker kiest frames; een ANPR-worker gebruikt de gekozen provider. De Passage-
-service blijft provider-onafhankelijk. CPU-, GPU- en externe API-providers kunnen zo
-worden verwisseld zonder web/API/database opnieuw te ontwerpen.
+Voor server-OCR publiceert video-ingest later jobs met storage-object-ID's naar
+Redis/BullMQ. De huidige ANPR-worker ontvangt camera-events; de PassageService blijft
+in beide gevallen provider-onafhankelijk. CPU-, GPU-, camera- en externe API-providers
+kunnen zo worden verwisseld zonder web/API/database opnieuw te ontwerpen.
 
 ## 13. Security-overzicht
 
@@ -225,9 +226,9 @@ productiedeployment voorzien, maar Fase 1 voegt geen schijn-HTTPS toe.
 
 `/health` is een eenvoudige livenesscheck. `/health/ready` controleert PostgreSQL,
 Redis, storage en aanwezigheid van FFmpeg. Vanaf Fase 2.1 rapporteert de API de
-video-worker via een actuele Redis-heartbeat; de ANPR-worker blijft eerlijk als
-`not_implemented` vermeld. Camerahealth is per camera zichtbaar via de workerstatus en
-handmatige verbindingstest.
+video-worker via een actuele Redis-heartbeat. Vanaf Fase 2.2 heeft de ANPR-worker een
+eigen heartbeat en per camera een eigen eventstatus. Camerahealth blijft daarnaast via
+de RTSP-workerstatus en handmatige verbindingstest zichtbaar.
 
 ## 16. Schaalbaarheid
 
@@ -251,8 +252,8 @@ indexes ondersteunen tijdgebaseerde cleanup en latere partitionering.
 
 ## 18. Bewuste TODO's na Fase 1
 
-- tracking, slimme frame-selectie en ANPR-provider (na Fase 2.1);
-- live HLS/WebRTC en passages via SSE/WebSocket (Fase 2);
+- tracking, slimme frame-selectie en server-OCR-provider (latere Fase 2-stap);
+- live HLS/WebRTC; de passagelijst gebruikt nu betrouwbare korte polling;
 - echte hit-, zoek-, groep- en dossierworkflows (Fase 3);
 - PWA/Web Push/meldkamer (Fase 4);
 - volledige retentiejobs, back-ups, monitoring en performancebeheer (Fase 5).
@@ -295,3 +296,80 @@ offline videoworker de beheerinterface niet onbereikbaar maakt.
 Fase 2.1 wijzigt het Prisma-schema niet. De bestaande velden dekken status,
 laatste poging, laatste succes, foutdiagnose en snapshot. ANPR/OCR, voertuigdetectie,
 passages, live video en notificaties blijven expliciet TODO voor latere stappen.
+
+## 20. Fase 2.2 — merk-onafhankelijke ANPR-eventinname
+
+Fase 2.2 voegt een afzonderlijke `anpr-worker` toe. Die worker beheert uitsluitend
+actieve camera's waarvoor `anprProvider` expliciet is ingesteld. De API en video-worker
+blijven onafhankelijk: een verbroken ANPR-eventstream verandert de RTSP-status niet en
+legt de webinterface niet stil.
+
+De interne grens is `AnprEventProvider`. Iedere provider levert hetzelfde
+`NormalizedAnprEvent` met camera-ID, tijd, origineel en genormaliseerd kenteken,
+optionele voertuigkenmerken, richting/lane, bron-ID en maximaal een overzichts- en
+kentekenfoto. Alleen de provider kent het leveranciersformaat:
+
+```text
+Dahua multipart event stream
+  -> Dahua parser
+  -> NormalizedAnprEvent
+  -> PassageService (validatie, deduplicatie, storage)
+  -> PostgreSQL + lokale objectopslag
+  -> beveiligde passage-API
+  -> webinterface (polling)
+```
+
+### Gekozen Dahua-interface en validatiegrens
+
+De officiële Dahua-productinformatie voor de ITC413-PW4D-IZ1 bevestigt ondersteuning
+voor CGI, ITSAPI, HTTP/HTTPS en JPEG. Dahua's HTTP API-specificatie beschrijft
+`TrafficJunction` als ANPR-event en de CGI-opdracht `snapManager.cgi` met actie
+`attachFileProc` als multipart-abonnement op events met snapshots. Daarom gebruikt de
+eerste provider deze read-only CGI-eventstream, met HTTP Digest-authenticatie en alleen
+de vaste, door de adapter samengestelde endpoint/query.
+
+De publiek beschikbare productdocumentatie bevat niet de volledige firmware-specifieke
+payload voor iedere ITC413-uitvoering. De adapter accepteert daarom alleen gedocumenteerde
+key/value-velden en JPEG-parts, negeert onbekende metadata en verzint geen ontbrekende
+waarden. De exacte eventvelden, afbeeldingsvolgorde en Digest-variant moeten nog met de
+daadwerkelijke firmware worden gevalideerd. Als die firmware een afwijkende officiële
+ITSAPI-variant vereist, wordt alleen de Dahua-provider aangepast.
+
+### Camera-capabilities en configuratie
+
+`CameraAnprProvider` bepaalt de adapter (`NONE` of `DAHUA_CGI`). Protocol, HTTP-poort en
+Dahua-kanaal zijn losse gevalideerde velden. `capabilities` is gestructureerde JSON voor
+onder meer RTSP, snapshots, camera-ANPR, plate crop en voertuigmetadata. De frontend
+baseert weergave op capabilities/provider en niet op een merknaam. De worker gebruikt
+uitsluitend de bestaande opgeslagen camerahost en AES-256-GCM-versleutelde credentials;
+een gebruiker kan geen willekeurige event-URL invoeren.
+
+### Passage, deduplicatie en opslag
+
+Echte Dahua-records krijgen `source=DAHUA_CAMERA`. `sourceEventId` is uniek binnen
+camera en bron. Als de camera geen bruikbare ID levert, controleert de PassageService
+dezelfde camera en exact hetzelfde genormaliseerde kenteken binnen een korte,
+configureerbare tijd. Er vindt geen O/0-, I/1- of andere gokcorrectie plaats.
+
+JPEG-parts worden vóór opslag gecontroleerd op type, JPEG-signature en begrensde
+bestandsgrootte. De lokale storageprovider genereert willekeurige objectnamen onder een
+vaste passage-prefix; kentekens en camerageheimen komen niet in bestandsnamen. PostgreSQL
+bevat alleen object-ID's. Bij een duplicate of databasefout ruimt de service zojuist
+geschreven objecten weer op. De bestaande `expiresAt` maakt latere gezamenlijke cleanup
+van rij en media mogelijk; een retention scheduler valt buiten Fase 2.2.
+
+### Betrouwbaarheid en status
+
+Elke camera draait in een geïsoleerde loop. Verbroken streams gebruiken begrensde
+exponential backoff met jitter. Een fout bij één camera blokkeert andere camera's niet.
+Redis bevat alleen een workerheartbeat zonder credentials of kentekens. PostgreSQL houdt
+per camera afzonderlijk de ANPR-connectiestatus, laatste verbinding, laatste event en
+een veilige foutcategorie bij. Productielogs gebruiken geen volledige kentekens.
+
+### Live passages
+
+De browser pollt de beveiligde `/passages`-API met `passages.view`; hij maakt nooit
+rechtstreeks verbinding met een camera. De lijst toont nieuwste eerst en markeert
+`DEMO` zichtbaar als demo. Afbeeldingen lopen via een geauthenticeerde API-route met
+object-ID/path-validatie. Polling is voor 5–10 gebruikers de eenvoudigste betrouwbare
+keuze en kan later achter dezelfde API-contracten door SSE worden vervangen.
