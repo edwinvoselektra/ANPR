@@ -72,6 +72,33 @@ services:
       retries: 10
     restart: unless-stopped
 
+  video-worker:
+    build:
+      context: .
+      dockerfile: apps/video-worker/Dockerfile
+      target: development
+    command: ["npm", "run", "dev", "-w", "@anpr/video-worker"]
+    environment:
+      <<: *api-environment
+      VIDEO_WORKER_PORT: ${VIDEO_WORKER_PORT:-4100}
+      VIDEO_SAMPLE_FPS: ${VIDEO_SAMPLE_FPS:-0.1}
+      VIDEO_RETRY_SECONDS: ${VIDEO_RETRY_SECONDS:-10}
+      VIDEO_CAMERA_REFRESH_SECONDS: ${VIDEO_CAMERA_REFRESH_SECONDS:-10}
+      VIDEO_CAPTURE_TIMEOUT_SECONDS: ${VIDEO_CAPTURE_TIMEOUT_SECONDS:-15}
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   web:
     build:
       context: .

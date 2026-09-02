@@ -11,6 +11,9 @@ export const PERMISSIONS = {
   AUDIT_VIEW: "audit.view"
 } as const;
 
+export const VIDEO_WORKER_HEARTBEAT_KEY = "anpr:video-worker:heartbeat:v1";
+export const VIDEO_WORKER_HEARTBEAT_STALE_MS = 15_000;
+
 export function normalizeLicensePlate(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }

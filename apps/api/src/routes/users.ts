@@ -55,8 +55,8 @@ async function activeAdminIds(): Promise<string[]> {
 
 async function resolveRoles(roleIds: string[]) {
   const uniqueIds = [...new Set(roleIds)];
-  const found = await prisma.role.findMany({ where: { id: { in: uniqueIds } }, select: roleSelection });
-  return found.length === uniqueIds.length ? found as RoleRecord[] : null;
+  const found = await prisma.role.findMany({ where: { id: { in: uniqueIds } }, select: roleSelection.select });
+  return found.length === uniqueIds.length ? found : null;
 }
 
 export async function userRoutes(app: FastifyInstance) {

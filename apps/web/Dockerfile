@@ -2,6 +2,7 @@ FROM node:22-alpine AS base
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/package.json
+COPY apps/video-worker/package.json apps/video-worker/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/shared/package.json packages/shared/package.json

@@ -51,7 +51,7 @@ const targetUser = (overrides: Record<string, unknown> = {}) => ({
   active: true, lastLoginAt: null, createdAt: new Date("2026-01-01T09:00:00Z"),
   roles: [{ role: operatorRole }], ...overrides
 });
-const targetAdmin = () => targetUser({ roles: [{ role: adminRole }] });
+const targetAdmin = (overrides: Record<string, unknown> = {}) => targetUser({ roles: [{ role: adminRole }], ...overrides });
 
 let app: FastifyInstance | undefined;
 
@@ -271,7 +271,7 @@ describe("rollen en uitschakelen", () => {
 describe("antwoordveiligheid", () => {
   it("geeft nooit een wachtwoord of hash terug via de gebruikerslijst", async () => {
     prismaMock.user.findMany
-      .mockResolvedValueOnce([targetUser({ passwordHash: "supergeheimebcrypthash" }), targetAdmin({ passwordHash: "supergeheimebcrypthash" })])
+      .mockResolvedValueOnce([targetUser({ passwordHash: "supergeheimebcrypthash" }), targetAdmin({ id: ADMIN_ID, passwordHash: "supergeheimebcrypthash" })])
       .mockResolvedValueOnce([{ id: TARGET_ID }]);
     app = buildServer();
 

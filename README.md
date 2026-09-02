@@ -2,7 +2,9 @@
 
 Een webbased ANPR-platform voor buurtpreventie. Fase 1 levert werkend gebruikers- en
 camerabeheer, veilige authenticatie, een dashboard, echte RTSP/FFmpeg-verbindingstests
-en een duidelijk gemarkeerde demo/simulator. Echte kentekenherkenning volgt in Fase 2.
+en een duidelijk gemarkeerde demo/simulator. Fase 2.1 voegt een zelfstandige
+video-worker toe die actieve camera's bewaakt en begrensd echte testframes ophaalt.
+Kentekenherkenning/OCR is nog niet geïmplementeerd.
 
 > **Belangrijk:** demo-passages zijn geen echte ANPR-detecties. De interface toont ze
 > altijd met bron `DEMO`.
@@ -96,10 +98,10 @@ Opnieuw starten:
 docker compose restart
 ```
 
-Logs volgen:
+Logs volgen, inclusief de video-worker:
 
 ```bash
-docker compose logs -f web api postgres redis
+docker compose logs -f web api video-worker postgres redis
 ```
 
 Stop het volgen van logs met `Ctrl+C`; de containers blijven draaien.
@@ -161,7 +163,43 @@ Readiness van PostgreSQL, Redis, storage en FFmpeg:
 curl http://localhost:4000/health/ready
 ```
 
-Video- en ANPR-workers staan bewust als `not_implemented`/`TODO Fase 2` vermeld.
+De video-worker publiceert een echte heartbeat en staat als Online/Offline op de
+beveiligde pagina **Systeemstatus**. De ANPR-worker blijft bewust `not_implemented`.
+
+Interne liveness van de video-worker controleer je via Docker:
+
+```bash
+docker compose exec video-worker wget -qO- http://127.0.0.1:4100/health
+```
+
+## Fase 2.1 video-worker handmatig testen
+
+1. Zorg dat een echte camera in **Camera’s** actief staat en eerder via de wizard is
+   getest. De worker gebruikt de opgeslagen, versleutelde verbinding.
+2. Start of herbouw de omgeving met `docker compose up -d --build`.
+3. Volg veilige workerlogs met `docker compose logs -f video-worker`.
+4. Open **Systeemstatus**. De video-worker moet Online worden en de camera hoort na
+   een succesvol frame als Online te verschijnen.
+5. Schakel de camera kort uit of blokkeer de RTSP-verbinding. Na de capture-timeout
+   wordt de camera Offline; de worker blijft opnieuw proberen.
+6. Herstel de camera. Zonder containerherstart moet de camera vanzelf weer Online
+   worden.
+
+De worker bewaart geen video en maakt geen passages. Per camera wordt alleen het
+nieuwste testframe bewaard; een volgend frame overschrijft het vorige atomair.
+
+Configuratie in `.env` is optioneel omdat Compose veilige developmentdefaults heeft:
+
+```dotenv
+VIDEO_SAMPLE_FPS=0.1
+VIDEO_RETRY_SECONDS=10
+VIDEO_CAMERA_REFRESH_SECONDS=10
+VIDEO_CAPTURE_TIMEOUT_SECONDS=15
+VIDEO_WORKER_PORT=4100
+```
+
+`VIDEO_SAMPLE_FPS` accepteert maximaal `1`. Verhoog dit niet zonder eerst CPU-, netwerk-
+en camerabelasting te controleren.
 
 ## Database en migraties
 
@@ -184,12 +222,15 @@ Voer na wijzigingen exact uit:
 
 ```bash
 docker compose run --rm api npm run build -w @anpr/api
+docker compose run --rm video-worker npm run build -w @anpr/video-worker
 docker compose run --rm web npm run build -w @anpr/web
 docker compose run --rm api npm run typecheck -w @anpr/database
 docker compose run --rm api npm run lint -w @anpr/api
+docker compose run --rm video-worker npm run lint -w @anpr/video-worker
 docker compose run --rm web npm run lint -w @anpr/web
 docker compose run --rm api npm run lint -w @anpr/shared
 docker compose run --rm api npm run test -w @anpr/api
+docker compose run --rm video-worker npm run test -w @anpr/video-worker
 docker compose run --rm api npm run test -w @anpr/database
 docker compose run --rm api npm run test -w @anpr/shared
 docker compose run --rm web npm run test -w @anpr/web
@@ -253,8 +294,10 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 
 - [Architectuur](docs/architecture.md)
 - [Resultaat Fase 1](docs/PHASE1-RESULT.md)
+- [Resultaat Fase 2.1](docs/PHASE2.1-RESULT.md)
 
 ## Volgende fase
 
-Fase 2 voegt echte RTSP-ingest, video-workers, tracking/frame-selectie, een verwisselbare
-`ANPRProvider`, eerste echte ANPR-engine, passages en duplicate detection toe.
+Na handmatige goedkeuring van Fase 2.1 kan een afzonderlijke volgende stap tracking,
+frame-selectie en de verwisselbare `ANPRProvider` ontwerpen. Deze onderdelen worden
+niet automatisch gestart.

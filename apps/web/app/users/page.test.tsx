@@ -39,7 +39,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 describe("gebruikersbeheer interface", () => {
   it("vraagt bevestiging en verwijdert een andere gebruiker definitief", async () => {
-    setupApi();
+    setupApi({ [`DELETE /users/${OTHER_ID}`]: () => Promise.resolve(undefined) });
     vi.stubGlobal("confirm", vi.fn(() => true));
     render(<Users />);
     expect(await screen.findByText("Jan")).toBeTruthy();

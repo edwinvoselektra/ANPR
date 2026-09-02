@@ -1,6 +1,6 @@
 # Architectuur ANPR-platform
 
-Status: vastgesteld voor Fase 1. Latere fases zijn alleen als uitbreidingspunt beschreven.
+Status: Fase 1 vastgesteld; aangevuld met de geïmplementeerde Fase 2.1 RTSP/video-workerbasis.
 
 ## 1. Doel en afbakening
 
@@ -19,6 +19,7 @@ workers en meerdere instanties toegevoegd kunnen worden.
 ```text
 apps/
   api/                 Node.js/TypeScript REST API
+  video-worker/        Afzonderlijke RTSP/frame-sampling worker
   web/                 Next.js/React/TypeScript webinterface
 packages/
   database/            Prisma-schema, migraties en seed
@@ -223,9 +224,10 @@ productiedeployment voorzien, maar Fase 1 voegt geen schijn-HTTPS toe.
 ## 15. Healthchecks
 
 `/health` is een eenvoudige livenesscheck. `/health/ready` controleert PostgreSQL,
-Redis, storage en aanwezigheid van FFmpeg. De respons noemt ANPR/video-workers als
-`not_implemented` en niet als gezond. Camerahealth is per camera zichtbaar na een echte
-verbindingstest.
+Redis, storage en aanwezigheid van FFmpeg. Vanaf Fase 2.1 rapporteert de API de
+video-worker via een actuele Redis-heartbeat; de ANPR-worker blijft eerlijk als
+`not_implemented` vermeld. Camerahealth is per camera zichtbaar via de workerstatus en
+handmatige verbindingstest.
 
 ## 16. Schaalbaarheid
 
@@ -249,7 +251,7 @@ indexes ondersteunen tijdgebaseerde cleanup en latere partitionering.
 
 ## 18. Bewuste TODO's na Fase 1
 
-- echte RTSP-ingest, tracking, frame-selectie en ANPR-provider (Fase 2);
+- tracking, slimme frame-selectie en ANPR-provider (na Fase 2.1);
 - live HLS/WebRTC en passages via SSE/WebSocket (Fase 2);
 - echte hit-, zoek-, groep- en dossierworkflows (Fase 3);
 - PWA/Web Push/meldkamer (Fase 4);
@@ -257,3 +259,39 @@ indexes ondersteunen tijdgebaseerde cleanup en latere partitionering.
 
 Deze onderdelen hebben datamodellen of interfaces waar dat migratierisico vermindert,
 maar worden in Fase 1 niet als werkende functionaliteit aangeboden.
+
+## 19. Fase 2.1 — video-worker en RTSP-basis
+
+Fase 2.1 activeert een afzonderlijke `video-worker` zonder de API of webinterface met
+videowerk te belasten. De worker bevraagt PostgreSQL periodiek op `active=true` en start
+voor iedere gevonden camera een geïsoleerde asynchrone cameraloop. Nieuwe, gewijzigde
+en uitgeschakelde camera's worden daardoor zonder hardcoded configuratie verwerkt.
+
+Een cameraloop bouwt de RTSP-URL uitsluitend in procesgeheugen op. De bestaande
+AES-256-GCM camera-encryptiesleutel ontsleutelt gebruikersnaam en wachtwoord vlak vóór
+de FFmpeg-aanroep. Normale logs bevatten alleen de cameranaam en een vaste melding;
+nooit de URL, credentials, subprocess-output of encryptiesleutel.
+
+FFmpeg leest per cyclus maximaal één JPEG-frame. `VIDEO_SAMPLE_FPS` is begrensd op
+maximaal 1 FPS en staat in development standaard op 0,1 FPS (één frame per tien
+seconden). Het nieuwste frame wordt atomair geschreven naar één vast object per
+camera onder `worker-snapshots/`, zodat sampling geen onbeperkte bestandsgroei
+veroorzaakt. Er is geen permanente opname, browsertranscoding of passage-opslag.
+
+Bij succes schrijft de worker `ONLINE`, verbindingsmoment en snapshot-object-ID naar
+de bestaande Camera-velden. Bij een veilige geclassificeerde fout schrijft hij
+`OFFLINE`, foutcode en foutmelding en probeert hij na `VIDEO_RETRY_SECONDS` opnieuw.
+Omdat iedere camera een eigen loop heeft, blokkeert een offline camera de overige
+camera's niet. Een configuratiewijziging herstart alleen de betreffende cameraloop.
+
+De worker publiceert iedere vijf seconden een Redis-heartbeat met TTL en biedt intern
+`GET /health` op poort 4100. De API vertaalt een recente heartbeat naar
+`videoWorker=healthy`; een ontbrekende of verlopen heartbeat wordt eerlijk als
+`unhealthy` getoond. Ook een langdurig mislukte database-refresh maakt de workerhealth
+degraded. De beveiligde systeemstatus-API haalt daarnaast alle camerastatussen
+uit PostgreSQL. De API-readiness blijft onafhankelijk van workeruitval, zodat een
+offline videoworker de beheerinterface niet onbereikbaar maakt.
+
+Fase 2.1 wijzigt het Prisma-schema niet. De bestaande velden dekken status,
+laatste poging, laatste succes, foutdiagnose en snapshot. ANPR/OCR, voertuigdetectie,
+passages, live video en notificaties blijven expliciet TODO voor latere stappen.
