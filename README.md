@@ -5,8 +5,9 @@ camerabeheer, veilige authenticatie, een dashboard, echte RTSP/FFmpeg-verbinding
 en een duidelijk gemarkeerde demo/simulator. Fase 2.1 voegt een zelfstandige
 video-worker toe die actieve camera's bewaakt en begrensd echte testframes ophaalt.
 Fase 2.2 voegt optionele Dahua-camera-ANPR-inname, echte passageopslag en het scherm
-**Live passages** toe. Fase 3 levert kenteken- en groepenbeheer, automatische hits,
-database-side zoeken en kentekendossiers. Server-side OCR blijft een latere provider.
+**Live passages** toe. Fase 2.3 levert kenteken- en groepenbeheer, automatische hits,
+database-side zoeken en kentekendossiers. Fase 2.4 maakt de webapp installeerbaar als
+PWA en voegt persoonlijke Web Push-hitmeldingen toe. Server-side OCR blijft een latere provider.
 
 > **Belangrijk:** demo-passages zijn geen echte ANPR-detecties. De interface toont ze
 > altijd met bron `DEMO`.
@@ -225,7 +226,55 @@ De logs tonen geen wachtwoord en redigeren kentekens. Stop volgen met `Ctrl+C`.
 
 Administrator en Operator mogen kentekens en groepen wijzigen. Viewer kan deze
 gegevens, hits en zoekresultaten alleen bekijken; de API blokkeert beheerrequests.
-Echte pushnotificaties zijn nog niet actief.
+Pushnotificaties kunnen per gebruiker en apparaat onder **Instellingen** worden geactiveerd.
+
+## PWA en Web Push instellen
+
+De gewone webapp blijft zonder pushsleutels werken. Voer voor Web Push één keer exact uit:
+
+```bash
+cd /home/edwin/projects/anpr-platform
+docker compose run --rm api npx web-push generate-vapid-keys
+```
+
+Dit toont een publieke en private sleutel. Open `.env` en vul uitsluitend lokaal in:
+
+```dotenv
+VAPID_PUBLIC_KEY=plak_hier_de_public_key
+VAPID_PRIVATE_KEY=plak_hier_de_private_key
+VAPID_SUBJECT=mailto:jouw-beheeradres@example.nl
+```
+
+De private sleutel mag nooit worden gedeeld of gecommit. Herbouw en start daarna:
+
+```bash
+docker compose up -d --build
+```
+
+Meldingen inschakelen:
+
+1. Open `http://localhost:3000` en log in.
+2. Open **Instellingen**.
+3. Klik zelf op **Meldingen op dit apparaat inschakelen**.
+4. Kies in de browser **Toestaan**.
+5. Kies alle hits of specifieke actieve hitgroepen en klik **Voorkeuren opslaan**.
+6. Gebruik **Testmelding** bij het gekoppelde apparaat.
+
+De browser vraagt nooit automatisch om toestemming. Als toestemming is geweigerd,
+open dan via het slotje in de adresbalk de site-instellingen, zet **Meldingen** op
+**Toestaan** en laad de pagina opnieuw.
+
+Installeren op desktop of Android kan via **App installeren** in het browsermenu. Op
+iPhone/iPad (iOS/iPadOS 16.4 of nieuwer) open je de site in Safari, kies je **Deel** →
+**Zet op beginscherm**, open je vervolgens die geïnstalleerde app en schakel je daar
+meldingen in. Buiten `localhost` vereisen PWA en Web Push een geldige HTTPS-verbinding;
+een onbeveiligd lokaal IP-adres is daarvoor niet voldoende.
+
+Een simulatorhit gebruikt hetzelfde centrale pushpad als een Dahua-hit. Test dit door
+een actief signaleringskenteken te simuleren en binnen enkele seconden de hitmelding
+op ieder ingeschakeld apparaat te controleren. De melding bevat geen afbeelding of
+credentials en opent de beveiligde hitdetailpagina. Meldingsinhoud kan zichtbaar zijn
+op het vergrendelscherm; stel de privacy daarvan op het apparaat naar wens in.
 
 ## Fase 2.1 video-worker handmatig testen
 

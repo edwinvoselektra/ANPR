@@ -52,6 +52,13 @@ describe("ADMIN-navigatie", () => {
     }
   });
 
+  it("toont Instellingen als echte pagina zonder label Later", async () => {
+    apiMock.mockResolvedValue({ user: { displayName: "Viewer", username: "viewer", roles: ["Viewer"], permissions: [] } });
+    render(<AppShell><div>Inhoud</div></AppShell>);
+    expect((await screen.findByRole("link", { name: "Instellingen" })).getAttribute("href")).toBe("/settings");
+    expect(screen.queryByText("Instellingen", { selector: ".nav-disabled" })).toBeNull();
+  });
+
   it("toont Gebruikers niet aan een Operator zonder users.manage", async () => {
     apiMock.mockResolvedValue({
       user: {

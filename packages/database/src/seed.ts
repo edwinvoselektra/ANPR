@@ -76,7 +76,7 @@ async function seedDemo() {
       }});
       if (isHit) await prisma.hit.create({ data: {
         passageId: passage.id, cameraId: camera.id, groupId: group.id, normalizedLicensePlate: norm,
-        location: camera.location, timestamp, reason: "DEMO: verdacht voertuig gemeld in de buurt", notificationStatus: "SKIPPED",
+        location: camera.location, timestamp, reason: "DEMO: verdacht voertuig gemeld in de buurt", notificationStatus: "PENDING",
         groups: { create: { groupId: group.id, reason: "DEMO: verdacht voertuig gemeld in de buurt" } }
       }});
     }

@@ -77,7 +77,7 @@ describe("simulator camerakeuze", () => {
     expect(createCall.data).toMatchObject({ cameraId: CAMERA_ID, location: "Dorpstraat 1", direction: "INCOMING", source: "DEMO", isHit: false });
     expect(prismaMock.passage.update).toHaveBeenCalledWith({ where: { id: PASSAGE_ID }, data: { isHit: true } });
     expect(prismaMock.hit.create).toHaveBeenCalledWith({ data: expect.objectContaining({
-      cameraId: CAMERA_ID, groupId: GROUP_ID, location: "Dorpstraat 1", normalizedLicensePlate: "12ABC3"
+      cameraId: CAMERA_ID, groupId: GROUP_ID, location: "Dorpstraat 1", normalizedLicensePlate: "12ABC3", notificationStatus: "PENDING"
     }) });
   });
 

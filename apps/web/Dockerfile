@@ -17,6 +17,7 @@ EXPOSE 3000
 
 FROM base AS build
 ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build -w @anpr/shared
 RUN npm run build -w @anpr/web
 
 FROM node:22-alpine AS production
@@ -24,6 +25,7 @@ WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /app/apps/web/public ./apps/web/public
 USER node
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]

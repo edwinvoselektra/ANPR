@@ -26,7 +26,7 @@ export async function detectAndCreateHit(tx: HitTransaction, input: {
     normalizedLicensePlate: input.normalizedLicensePlate, location: input.location,
     timestamp: input.timestamp, vehicleImageObjectId: input.vehicleImageObjectId,
     plateImageObjectId: input.plateImageObjectId, reason: primary.reason,
-    notificationStatus: "SKIPPED",
+    notificationStatus: "PENDING",
     groups: { create: matches.map((match) => ({ groupId: match.groupId, reason: match.reason })) }
   } });
   await tx.passage.update({ where: { id: input.passageId }, data: { isHit: true } });

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const schema = readFileSync(resolve(process.cwd(), "prisma/schema.prisma"), "utf8");
 
 describe("Prisma-datamodel", () => {
-  it.each(["User", "Role", "Permission", "UserSession", "Camera", "CameraZone", "Passage", "Vehicle", "PlateDetection", "PlateGroup", "PlateGroupMember", "Hit", "HitGroup", "Notification", "PushSubscription", "AuditLog", "SystemSetting", "RetentionException"])("bevat model %s", (model) => {
+  it.each(["User", "Role", "Permission", "UserSession", "Camera", "CameraZone", "Passage", "Vehicle", "PlateDetection", "PlateGroup", "PlateGroupMember", "Hit", "HitGroup", "Notification", "PushSubscription", "NotificationPreference", "NotificationPreferenceGroup", "AuditLog", "SystemSetting", "RetentionException"])("bevat model %s", (model) => {
     expect(schema).toContain(`model ${model} {`);
   });
   it("slaat afbeeldingen alleen als object-ID op", () => {

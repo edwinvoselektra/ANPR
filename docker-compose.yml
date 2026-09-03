@@ -62,7 +62,11 @@ services:
       dockerfile: apps/api/Dockerfile
       target: development
     command: ["npm", "run", "dev", "-w", "@anpr/api"]
-    environment: *api-environment
+    environment:
+      <<: *api-environment
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     ports:
       - "4000:4000"
     volumes:

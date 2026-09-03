@@ -66,7 +66,7 @@ export class PassageService {
             normalizedLicensePlate: event.normalizedPlate, location: camera.location,
             timestamp: event.occurredAt, vehicleImageObjectId: overviewObjectId,
             plateImageObjectId: plateObjectId, reason: primary.reason,
-            notificationStatus: "SKIPPED",
+            notificationStatus: "PENDING",
             groups: { create: matches.map((match) => ({ groupId: match.groupId, reason: match.reason })) }
           } });
           await tx.passage.update({ where: { id: created.id }, data: { isHit: true } });

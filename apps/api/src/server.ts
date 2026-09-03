@@ -19,9 +19,11 @@ import { plateGroupRoutes } from "./routes/plate-groups.js";
 import { plateRoutes } from "./routes/plates.js";
 import { searchRoutes } from "./routes/search.js";
 import { userRoutes } from "./routes/users.js";
+import { notificationRoutes } from "./routes/notifications.js";
+import { startNotificationDispatcher } from "./lib/notification-dispatcher.js";
 
 export function buildServer() {
-  const app = Fastify({ logger: { redact: ["req.headers.cookie", "req.headers.authorization", "req.body.password", "req.body.rtspUrl", "req.body.username"] }, bodyLimit: 1_048_576, trustProxy: true });
+  const app = Fastify({ logger: { redact: ["req.headers.cookie", "req.headers.authorization", "req.body.password", "req.body.rtspUrl", "req.body.username", "req.body.endpoint", "req.body.keys", "req.body.p256dh", "req.body.auth"] }, bodyLimit: 1_048_576, trustProxy: true });
   void app.register(cookie);
   void app.register(helmet, { contentSecurityPolicy: false });
   void app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
@@ -73,15 +75,17 @@ export function buildServer() {
   void app.register(plateRoutes);
   void app.register(hitRoutes);
   void app.register(searchRoutes);
+  void app.register(notificationRoutes);
   return app;
 }
 
 const executedFile = process.argv[1];
 if (executedFile && fileURLToPath(import.meta.url) === resolve(executedFile)) {
   const app = buildServer();
-  const shutdown = async () => { await app.close(); await prisma.$disconnect(); process.exit(0); };
+  let stopNotifications: () => void = () => undefined;
+  const shutdown = async () => { stopNotifications(); await app.close(); await prisma.$disconnect(); process.exit(0); };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
-  try { await app.listen({ host: "0.0.0.0", port: config.API_PORT }); }
+  try { await app.listen({ host: "0.0.0.0", port: config.API_PORT }); stopNotifications = startNotificationDispatcher(app.log); }
   catch (error) { app.log.error(error); await prisma.$disconnect(); process.exit(1); }
 }

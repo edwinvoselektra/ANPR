@@ -20,8 +20,9 @@ const items: readonly NavigationItem[] = [
   { href: "/users", icon: "users", label: "Gebruikers", permission: PERMISSIONS.USERS_MANAGE },
   { href: "/simulator", icon: "demo", label: "Demo / simulator", permission: PERMISSIONS.SIMULATOR_RUN },
   { href: "/system", icon: "health", label: "Systeemstatus", permission: PERMISSIONS.SYSTEM_VIEW }
+  ,{ href: "/settings", icon: "settings", label: "Instellingen" }
 ];
-const future = ["Live camera’s", "Kaart", "Meldkamer", "Auditlog", "Instellingen"];
+const future = ["Live camera’s", "Kaart", "Meldkamer", "Auditlog"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();

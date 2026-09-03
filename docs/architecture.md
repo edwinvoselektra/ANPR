@@ -425,5 +425,46 @@ exacte epochwaarden in de twee optionele geldigheidsvelden worden teruggezet naa
 optioneel groepsicoon wordt eveneens expliciet als `NULL` behandeld, zodat bestaande
 seed- en demogroepen normaal bewerkbaar zijn.
 
-Web Push/PWA, live browservideo, server-OCR, retentiescheduler en productiedeployment
-vallen uitdrukkelijk buiten deze fase.
+Live browservideo, server-OCR, retentiescheduler en productiedeployment vallen
+uitdrukkelijk buiten deze fase.
+
+## 22. Fase 2.4 — PWA en Web Push
+
+De Next.js-app levert een manifest, schaalbaar applicatie-icoon en een kleine service
+worker. De service worker cachet bewust geen beveiligde pagina- of API-data; hierdoor
+kan oude gevoelige ANPR-inhoud niet uit een offline cache verschijnen. Als service
+worker-registratie niet wordt ondersteund, blijft de gewone webapp ongewijzigd werken.
+Browsertoestemming wordt uitsluitend aangevraagd na een expliciete gebruikersklik.
+
+Pushabonnementen behoren altijd aan de ingelogde gebruiker. `endpoint`, `p256dh` en
+`auth` worden opgeslagen voor server-side aflevering, maar komen niet terug in API-
+responses, auditmetadata of logs. Meerdere apparaten per gebruiker zijn toegestaan.
+Een 404/410 van de pushprovider schakelt alleen het verlopen apparaat uit.
+
+`NotificationPreference` bevat de persoonlijke hoofdschakelaar en de keuze voor alle
+hitgroepen of een dynamische selectie. `NotificationPreferenceGroup` legt deze selectie
+vast. `Notification` is de afleverhistorie/outbox met status, ontvanger, optioneel hit-
+en apparaat-ID, beperkt aantal pogingen en een veilige foutcategorie. De VAPID private
+key bestaat uitsluitend in de API-omgeving.
+
+```text
+Simulator / Dahua / toekomstige bron
+  -> transactioneel opgeslagen Passage + Hit(PENDING)
+  -> asynchrone database-outbox-dispatcher
+  -> actieve gebruiker + persoonlijke groepsvoorkeur
+  -> ieder actief PushSubscription maximaal één delivery
+  -> Web Push-provider
+  -> service worker -> beveiligde /hits/<id>-pagina
+```
+
+De unieke `deduplicationKey` maakt aflevering per hit/apparaat idempotent bij normale
+workerherstarts en retries. Een delivery wordt vóór de externe call `PROCESSING`, zodat
+een crash niet automatisch een mogelijk al verzonden bericht herhaalt. Tijdelijke
+providerfouten krijgen maximaal drie directe pogingen; er is geen oneindige retryloop.
+Een pushfout verandert de al opgeslagen hit of passage niet.
+
+De dispatcher draait in Fase 2.4 als niet-blokkerende achtergrondtaak in het API-proces.
+De outboxgrens maakt latere verplaatsing naar een aparte schaalbare notification-worker
+mogelijk zonder hitproducenten of frontendcontracten te wijzigen. Ontbrekende VAPID-
+configuratie wordt op Systeemstatus als `not_configured` getoond en laat hits `PENDING`,
+zodat het platform niet crasht en ze na configuratie alsnog verwerkt kunnen worden.

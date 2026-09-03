@@ -7,6 +7,7 @@ import { ANPR_WORKER_HEARTBEAT_KEY, ANPR_WORKER_HEARTBEAT_STALE_MS, PERMISSIONS,
 import { config } from "../config.js";
 import { requirePermission } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { pushConfiguration } from "../lib/push.js";
 
 async function commandExists(command: string) {
   return new Promise<boolean>((resolve) => {
@@ -60,6 +61,7 @@ async function checks() {
   status.ffmpeg = { status: await commandExists("ffmpeg") ? "healthy" : "unhealthy" };
   status.videoWorker = videoWorkerStatus(workerHeartbeat);
   status.anprWorker = anprWorkerStatus(anprHeartbeat);
+  status.webPush = { status: pushConfiguration.state === "online" ? "healthy" : pushConfiguration.state, message: pushConfiguration.message };
   return status;
 }
 
@@ -83,6 +85,6 @@ export async function healthRoutes(app: FastifyInstance) {
         orderBy: [{ displayOrder: "asc" }, { name: "asc" }]
       })
     ]);
-    return { services, cameras, demoMode: config.DEMO_MODE, version: "0.2.2" };
+    return { services, cameras, demoMode: config.DEMO_MODE, version: "0.2.4" };
   });
 }

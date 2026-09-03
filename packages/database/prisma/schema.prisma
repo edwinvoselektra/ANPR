@@ -85,6 +85,7 @@ enum VehicleColor {
 
 enum NotificationStatus {
   PENDING
+  PROCESSING
   SENT
   FAILED
   SKIPPED
@@ -108,6 +109,8 @@ model User {
   groupMembersAdded  PlateGroupMember[]   @relation("GroupMemberAddedBy")
   retentionExceptions RetentionException[]
   pushSubscriptions  PushSubscription[]
+  notificationPreference NotificationPreference?
+  notifications      Notification[]
 }
 
 model Role {
@@ -312,6 +315,7 @@ model PlateGroup {
   members              PlateGroupMember[]
   hits                 Hit[]
   hitLinks             HitGroup[]
+  notificationPreferences NotificationPreferenceGroup[]
 
   @@index([active])
 }
@@ -379,32 +383,66 @@ model HitGroup {
 }
 
 model Notification {
-  id          String             @id @default(uuid()) @db.Uuid
-  hitId       String             @db.Uuid
-  recipientId String?            @db.Uuid
-  channel     String
-  status      NotificationStatus @default(PENDING)
-  sentAt      DateTime?
-  error       String?
-  createdAt   DateTime           @default(now())
-  hit         Hit                @relation(fields: [hitId], references: [id], onDelete: Cascade)
+  id               String             @id @default(uuid()) @db.Uuid
+  hitId            String?            @db.Uuid
+  recipientId      String?            @db.Uuid
+  subscriptionId   String?            @db.Uuid
+  deduplicationKey String             @unique
+  channel          String
+  status           NotificationStatus @default(PENDING)
+  attemptCount     Int                @default(0)
+  sentAt           DateTime?
+  failureCategory  String?
+  error            String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  hit              Hit?               @relation(fields: [hitId], references: [id], onDelete: Cascade)
+  recipient        User?              @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  subscription     PushSubscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   @@index([hitId])
   @@index([recipientId, status])
+  @@index([subscriptionId, status])
 }
 
 model PushSubscription {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String         @id @default(uuid()) @db.Uuid
+  userId           String         @db.Uuid
+  endpoint         String         @unique
+  p256dh            String
+  auth              String
+  userAgent         String?
+  deviceName        String?
+  enabled           Boolean        @default(true)
+  lastSuccessfulAt DateTime?
+  failureCount      Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notifications    Notification[]
 
-  @@index([userId, active])
+  @@index([userId, enabled])
+}
+
+model NotificationPreference {
+  id           String                        @id @default(uuid()) @db.Uuid
+  userId       String                        @unique @db.Uuid
+  pushEnabled  Boolean                       @default(false)
+  allHitGroups Boolean                       @default(true)
+  createdAt    DateTime                      @default(now())
+  updatedAt    DateTime                      @updatedAt
+  user         User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groups       NotificationPreferenceGroup[]
+}
+
+model NotificationPreferenceGroup {
+  preferenceId String                 @db.Uuid
+  groupId      String                 @db.Uuid
+  preference   NotificationPreference @relation(fields: [preferenceId], references: [id], onDelete: Cascade)
+  group        PlateGroup             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([preferenceId, groupId])
+  @@index([groupId])
 }
 
 model AuditLog {
