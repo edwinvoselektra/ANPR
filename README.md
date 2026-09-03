@@ -5,7 +5,8 @@ camerabeheer, veilige authenticatie, een dashboard, echte RTSP/FFmpeg-verbinding
 en een duidelijk gemarkeerde demo/simulator. Fase 2.1 voegt een zelfstandige
 video-worker toe die actieve camera's bewaakt en begrensd echte testframes ophaalt.
 Fase 2.2 voegt optionele Dahua-camera-ANPR-inname, echte passageopslag en het scherm
-**Live passages** toe. Server-side OCR blijft een latere provider.
+**Live passages** toe. Fase 3 levert kenteken- en groepenbeheer, automatische hits,
+database-side zoeken en kentekendossiers. Server-side OCR blijft een latere provider.
 
 > **Belangrijk:** demo-passages zijn geen echte ANPR-detecties. De interface toont ze
 > altijd met bron `DEMO`.
@@ -135,17 +136,18 @@ Veelvoorkomende RTSP-fouten:
 
 1. Log in als Administrator of Operator.
 2. Open **Demo / simulator**.
-3. Selecteer een Uddel-camera.
-4. Gebruik `12-ABC-3` om een DEMO-hit te maken.
-5. Klik **DEMO-passage genereren**.
-6. Open/ververs Dashboard om de echte databasewijziging te zien.
+3. Selecteer een actieve echte of demo-camera uit de database.
+4. Kies kenteken, voertuigkleur, voertuigtype, rijrichting en eventueel een tijdstip.
+5. Gebruik `12-ABC-3` om met de standaard demo-data een DEMO-hit te maken.
+6. Klik **DEMO-passage genereren**.
+7. Controleer **Live passages**, **Hits**, **Dashboard**, **Zoeken** en het dossier.
 
 De simulator analyseert geen beeld en doet geen claim van echte herkenning.
 
 ## Gebruikers, rollen en sessies
 
 - Administrator beheert gebruikers, camera's en systeemstatus.
-- Operator kan passages/hits zien, kentekens beheren (workflow volgt Fase 3) en de
+- Operator kan passages/hits zien, kentekens en groepen beheren en de
   simulator bedienen, maar geen kritieke instellingen wijzigen.
 - Viewer heeft alleen leesrechten en wordt server-side geweigerd bij beheeracties.
 - Na vijf foute wachtwoorden wordt een account 15 minuten geblokkeerd.
@@ -205,6 +207,25 @@ docker compose logs -f anpr-worker
 ```
 
 De logs tonen geen wachtwoord en redigeren kentekens. Stop volgen met `Ctrl+C`.
+
+## Kentekens, groepen, hits en zoeken
+
+1. Open **Groepen** en maak bijvoorbeeld `Aandacht` aan.
+2. Zet **Hitdetectie actief** en **Reden verplicht** aan.
+3. Open **Kentekens**, voeg `12-ABC-3` toe, kies de groep en vul een reden in.
+4. Eén kenteken kan aan meerdere groepen worden gekoppeld. Spaties en streepjes worden
+   voor vergelijking verwijderd; er worden geen gokcorrecties voor O/0 of I/1 gedaan.
+5. Gebruik de simulator of laat een echte Dahua-passage binnenkomen. Een actieve,
+   geldige match maakt automatisch precies één hit per opgeslagen passage.
+6. Open **Hits** voor de nieuwste hits en klik door naar alle details en foto's.
+7. Open **Zoeken** om kenteken, kleur, type, camera, locatie, datum, tijd, groep, hit en
+   rijrichting te combineren. Resultaten worden in PostgreSQL gefilterd en gepagineerd.
+8. Klik in de kentekenlijst of zoekresultaten op het kenteken voor het dossier met
+   losse waarnemingen. Dit is nadrukkelijk geen gegarandeerde realtime locatie.
+
+Administrator en Operator mogen kentekens en groepen wijzigen. Viewer kan deze
+gegevens, hits en zoekresultaten alleen bekijken; de API blokkeert beheerrequests.
+Echte pushnotificaties zijn nog niet actief.
 
 ## Fase 2.1 video-worker handmatig testen
 
@@ -333,9 +354,10 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 - [Resultaat Fase 1](docs/PHASE1-RESULT.md)
 - [Resultaat Fase 2.1](docs/PHASE2.1-RESULT.md)
 - [Resultaat Fase 2.2](docs/PHASE2.2-RESULT.md)
+- [Resultaat Fase 3](docs/PHASE3-RESULT.md)
 
 ## Volgende fase
 
-Na handmatige goedkeuring van Fase 2.2 kan een volgende, afzonderlijk afgesproken fase
-verder bouwen op passages. Pushmeldingen, volledige watchlists en server-OCR zijn niet
-automatisch gestart.
+Na handmatige goedkeuring van Fase 3 kan een volgende, afzonderlijk afgesproken fase
+worden gestart. Push/PWA, live browservideo, server-OCR, retentiescheduler en productie-
+deployment zijn niet automatisch gestart.

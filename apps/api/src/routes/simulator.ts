@@ -1,15 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { calculatePassageExpiry, displayLicensePlate, normalizeLicensePlate, PERMISSIONS, shouldCreateHit } from "@anpr/shared";
+import { calculatePassageExpiry, displayLicensePlate, normalizeLicensePlate, PERMISSIONS } from "@anpr/shared";
 import { config } from "../config.js";
 import { audit } from "../lib/audit.js";
 import { requirePermission } from "../lib/auth.js";
+import { detectAndCreateHit } from "../lib/hit-detection.js";
 import { prisma } from "../lib/prisma.js";
 
 const schema = z.object({
   cameraId: z.string().uuid(), licensePlate: z.string().trim().min(2).max(20).default("12-ABC-3"),
   vehicleColor: z.enum(["BLACK", "WHITE", "GRAY", "SILVER", "RED", "BLUE", "GREEN", "YELLOW", "BROWN", "ORANGE", "OTHER", "UNKNOWN"]).default("BLACK"),
-  vehicleType: z.enum(["CAR", "VAN", "TRUCK", "MOTORCYCLE", "BUS", "TRAILER", "UNKNOWN"]).default("CAR")
+  vehicleType: z.enum(["CAR", "VAN", "TRUCK", "MOTORCYCLE", "BUS", "TRAILER", "UNKNOWN"]).default("CAR"),
+  timestamp: z.string().datetime().optional(),
+  direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]).optional()
 });
 
 export async function simulatorRoutes(app: FastifyInstance) {
@@ -31,32 +34,27 @@ export async function simulatorRoutes(app: FastifyInstance) {
     if (!camera) return reply.code(404).send({ error: "CAMERA_NOT_FOUND", message: "De gekozen camera bestaat niet (meer). Ververs de camerakeuze." });
     if (!camera.active) return reply.code(400).send({ error: "CAMERA_INACTIVE", message: "De gekozen camera is uitgeschakeld en kan niet worden gebruikt voor een demopassage." });
     const normalized = normalizeLicensePlate(body.licensePlate);
-    const groupMember = await prisma.plateGroupMember.findFirst({
-      where: { normalizedLicensePlate: normalized, active: true, group: { active: true } },
-      include: { group: true }
-    });
-    const timestamp = new Date();
-    const matchedMember = groupMember && shouldCreateHit({ active: groupMember.active, groupActive: groupMember.group.active, validFrom: groupMember.validFrom, validUntil: groupMember.validUntil }, timestamp) ? groupMember : null;
+    const timestamp = body.timestamp ? new Date(body.timestamp) : new Date();
+    const direction = body.direction ?? camera.direction;
     const expiresAt = calculatePassageExpiry(timestamp);
     const passage = await prisma.$transaction(async (tx) => {
       const created = await tx.passage.create({ data: {
         originalLicensePlate: body.licensePlate, normalizedLicensePlate: normalized,
         displayLicensePlate: displayLicensePlate(body.licensePlate), plateConfidence: 0.98,
-        timestamp, cameraId: camera.id, location: camera.location, direction: camera.direction,
+        timestamp, cameraId: camera.id, location: camera.location, direction,
         vehicleColor: body.vehicleColor, vehicleType: body.vehicleType, vehicleConfidence: 0.95,
-        isHit: Boolean(matchedMember), source: "DEMO", expiresAt,
+        isHit: false, source: "DEMO", expiresAt,
         vehicle: { create: { type: body.vehicleType, color: body.vehicleColor, confidence: 0.95, metadata: { demo: true } } },
         plateDetections: { create: { rawLicensePlate: body.licensePlate, normalizedLicensePlate: normalized, confidence: 0.98 } }
       }});
-      if (matchedMember) await tx.hit.create({ data: {
-        passageId: created.id, cameraId: camera.id, groupId: matchedMember.groupId,
-        normalizedLicensePlate: normalized, location: camera.location, timestamp,
-        reason: matchedMember.reason, notificationStatus: "SKIPPED"
-      }});
+      const hit = await detectAndCreateHit(tx, {
+        passageId: created.id, cameraId: camera.id, normalizedLicensePlate: normalized,
+        location: camera.location, timestamp, direction, source: "DEMO"
+      });
       await tx.camera.update({ where: { id: camera.id }, data: { lastVehicleRegistrationAt: timestamp } });
-      return created;
+      return { passage: { ...created, isHit: Boolean(hit) }, hit };
     });
-    await audit(request, "DEMO_PASSAGE_CREATED", { objectType: "Passage", objectId: passage.id, metadata: { cameraId: camera.id, isHit: Boolean(matchedMember) } });
-    return reply.code(201).send({ passage: { ...passage, demo: true }, hit: Boolean(matchedMember) });
+    await audit(request, "DEMO_PASSAGE_CREATED", { objectType: "Passage", objectId: passage.passage.id, metadata: { cameraId: camera.id, isHit: Boolean(passage.hit) } });
+    return reply.code(201).send({ passage: { ...passage.passage, isHit: Boolean(passage.hit), demo: true }, hit: Boolean(passage.hit), matchedGroups: passage.hit?.groups ?? [] });
   });
 }

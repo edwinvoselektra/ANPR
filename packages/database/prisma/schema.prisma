@@ -265,6 +265,8 @@ model Passage {
   @@index([vehicleColor])
   @@index([vehicleType])
   @@index([isHit, timestamp])
+  @@index([location, timestamp])
+  @@index([direction, timestamp])
   @@index([expiresAt])
   @@unique([cameraId, source, sourceEventId])
 }
@@ -301,6 +303,7 @@ model PlateGroup {
   description          String?
   color                String
   icon                 String?
+  hitEnabled           Boolean            @default(false)
   pushNotifications    Boolean            @default(false)
   active               Boolean            @default(true)
   reasonRequired       Boolean            @default(false)
@@ -308,6 +311,7 @@ model PlateGroup {
   updatedAt            DateTime           @updatedAt
   members              PlateGroupMember[]
   hits                 Hit[]
+  hitLinks             HitGroup[]
 
   @@index([active])
 }
@@ -332,6 +336,7 @@ model PlateGroupMember {
   @@unique([groupId, normalizedLicensePlate])
   @@index([normalizedLicensePlate, active])
   @@index([groupId])
+  @@index([groupId, active])
 }
 
 model Hit {
@@ -351,11 +356,25 @@ model Hit {
   passage                Passage            @relation(fields: [passageId], references: [id], onDelete: Cascade)
   camera                 Camera             @relation(fields: [cameraId], references: [id], onDelete: Restrict)
   group                  PlateGroup         @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  groups                 HitGroup[]
   notifications          Notification[]
 
+  @@unique([passageId])
   @@index([timestamp])
   @@index([normalizedLicensePlate])
   @@index([cameraId])
+  @@index([groupId])
+}
+
+model HitGroup {
+  hitId     String     @db.Uuid
+  groupId   String     @db.Uuid
+  reason    String?
+  createdAt DateTime   @default(now())
+  hit       Hit        @relation(fields: [hitId], references: [id], onDelete: Cascade)
+  group     PlateGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  @@id([hitId, groupId])
   @@index([groupId])
 }
 

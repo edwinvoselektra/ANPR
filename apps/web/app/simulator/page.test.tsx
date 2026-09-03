@@ -53,6 +53,23 @@ describe("simulator camerakeuze", () => {
     expect(await screen.findByText("DEMO-passage aangemaakt")).toBeTruthy();
   });
 
+  it("stuurt gekozen rijrichting en tijdstip gecontroleerd mee", async () => {
+    apiMock.mockImplementation((path: string, options?: RequestInit) => {
+      if (path === "/simulator" && !options?.method) return Promise.resolve({ enabled: true, cameras: [UDDEL] });
+      if (path === "/simulator/passages" && options?.method === "POST") return Promise.resolve({ passage: { displayLicensePlate: "12-ABC-3", source: "DEMO" }, hit: true });
+      throw new Error(`Onverwachte API-aanroep: ${options?.method ?? "GET"} ${path}`);
+    });
+    render(<Simulator />);
+    await screen.findByText("Uddel Noord");
+    fireEvent.change(screen.getByLabelText("Rijrichting"), { target: { value: "OUTGOING" } });
+    fireEvent.change(screen.getByLabelText("Tijdstip (optioneel)"), { target: { value: "2026-09-03T20:15" } });
+    fireEvent.click(screen.getByRole("button", { name: "DEMO-passage genereren" }));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith("/simulator/passages", expect.objectContaining({ method: "POST" })));
+    const call = apiMock.mock.calls.find(([path, options]) => path === "/simulator/passages" && options?.method === "POST");
+    expect(JSON.parse((call?.[1] as RequestInit).body as string)).toMatchObject({ direction: "OUTGOING" });
+    expect(await screen.findByText("DEMO-HIT aangemaakt")).toBeTruthy();
+  });
+
   it("toont een duidelijke lege staat zonder actieve camera's en blokkeert genereren", async () => {
     apiMock.mockImplementation((path: string) => {
       if (path === "/simulator") return Promise.resolve({ enabled: true, cameras: [] });

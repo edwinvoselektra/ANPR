@@ -47,6 +47,30 @@ export class PassageService {
             confidence: event.confidence ?? 0, frameObjectId: plateObjectId
           } }
         } });
+        const matches = await tx.plateGroupMember.findMany({
+          where: {
+            normalizedLicensePlate: event.normalizedPlate, active: true,
+            AND: [
+              { OR: [{ validFrom: null }, { validFrom: { lte: event.occurredAt } }] },
+              { OR: [{ validUntil: null }, { validUntil: { gte: event.occurredAt } }] }
+            ],
+            group: { active: true, hitEnabled: true }
+          },
+          include: { group: { select: { id: true, name: true } } },
+          orderBy: [{ group: { name: "asc" } }, { groupId: "asc" }]
+        });
+        if (matches.length) {
+          const primary = matches[0]!;
+          await tx.hit.create({ data: {
+            passageId: created.id, cameraId: camera.id, groupId: primary.groupId,
+            normalizedLicensePlate: event.normalizedPlate, location: camera.location,
+            timestamp: event.occurredAt, vehicleImageObjectId: overviewObjectId,
+            plateImageObjectId: plateObjectId, reason: primary.reason,
+            notificationStatus: "SKIPPED",
+            groups: { create: matches.map((match) => ({ groupId: match.groupId, reason: match.reason })) }
+          } });
+          await tx.passage.update({ where: { id: created.id }, data: { isHit: true } });
+        }
         await tx.camera.update({ where: { id: camera.id }, data: {
           lastVehicleRegistrationAt: event.occurredAt, lastAnprEventAt: event.occurredAt,
           anprConnectionStatus: "CONNECTED", lastAnprErrorCode: null, lastAnprError: null

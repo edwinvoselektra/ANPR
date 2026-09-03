@@ -38,6 +38,20 @@ describe("ADMIN-navigatie", () => {
     expect(link.getAttribute("href")).toBe("/users");
   });
 
+  it("toont de geactiveerde analysepagina's zonder label Later", async () => {
+    apiMock.mockResolvedValue({
+      user: {
+        displayName: "Beheerder", username: "admin", roles: ["Administrator"],
+        permissions: [PERMISSIONS.PASSAGES_VIEW, PERMISSIONS.HITS_VIEW, PERMISSIONS.PLATES_MANAGE]
+      }
+    });
+    render(<AppShell><div>Inhoud</div></AppShell>);
+
+    for (const name of ["Hits", "Zoeken", "Kentekens", "Groepen"]) {
+      expect((await screen.findByRole("link", { name })).getAttribute("href")).toBeTruthy();
+    }
+  });
+
   it("toont Gebruikers niet aan een Operator zonder users.manage", async () => {
     apiMock.mockResolvedValue({
       user: {

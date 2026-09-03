@@ -12,12 +12,16 @@ type NavigationItem = { href: string; icon: string; label: string; permission?: 
 const items: readonly NavigationItem[] = [
   { href: "/", icon: "dashboard", label: "Dashboard" },
   { href: "/passages", icon: "camera", label: "Live passages", permission: PERMISSIONS.PASSAGES_VIEW },
+  { href: "/hits", icon: "hit", label: "Hits", permission: PERMISSIONS.HITS_VIEW },
+  { href: "/search", icon: "search", label: "Zoeken", permission: PERMISSIONS.PASSAGES_VIEW },
+  { href: "/plates", icon: "plate", label: "Kentekens", permission: PERMISSIONS.PASSAGES_VIEW },
+  { href: "/groups", icon: "groups", label: "Groepen", permission: PERMISSIONS.PASSAGES_VIEW },
   { href: "/cameras", icon: "camera", label: "Camera’s" },
   { href: "/users", icon: "users", label: "Gebruikers", permission: PERMISSIONS.USERS_MANAGE },
   { href: "/simulator", icon: "demo", label: "Demo / simulator", permission: PERMISSIONS.SIMULATOR_RUN },
   { href: "/system", icon: "health", label: "Systeemstatus", permission: PERMISSIONS.SYSTEM_VIEW }
 ];
-const future = ["Live camera’s", "Hits", "Zoeken", "Kentekens", "Groepen", "Kaart", "Meldkamer", "Auditlog", "Instellingen"];
+const future = ["Live camera’s", "Kaart", "Meldkamer", "Auditlog", "Instellingen"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();

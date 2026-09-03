@@ -6,9 +6,9 @@ vi.hoisted(() => { process.env.DEMO_MODE = "true"; });
 
 const prismaMock = vi.hoisted(() => ({
   camera: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-  passage: { create: vi.fn() },
+  passage: { create: vi.fn(), update: vi.fn() },
   hit: { create: vi.fn() },
-  plateGroupMember: { findFirst: vi.fn() },
+  plateGroupMember: { findMany: vi.fn() },
   auditLog: { create: vi.fn() },
   $transaction: vi.fn()
 }));
@@ -40,11 +40,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.auditLog.create.mockResolvedValue({});
   prismaMock.camera.findUnique.mockResolvedValue(camera);
-  prismaMock.plateGroupMember.findFirst.mockResolvedValue(null);
+  prismaMock.plateGroupMember.findMany.mockResolvedValue([]);
   prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn({
-    passage: { create: prismaMock.passage.create }, hit: { create: prismaMock.hit.create }, camera: { update: prismaMock.camera.update }
+    passage: prismaMock.passage, hit: prismaMock.hit, plateGroupMember: prismaMock.plateGroupMember, camera: { update: prismaMock.camera.update }
   }));
   prismaMock.passage.create.mockResolvedValue(passageRecord);
+  prismaMock.passage.update.mockResolvedValue({ ...passageRecord, isHit: true });
+  prismaMock.hit.create.mockResolvedValue({ id: "55555555-5555-4555-8555-555555555555" });
 });
 afterEach(async () => { await app?.close(); app = undefined; });
 
@@ -64,7 +66,7 @@ describe("simulator camerakeuze", () => {
   });
 
   it("koppelt een gesimuleerde passage en hit aan de daadwerkelijk gekozen camera", async () => {
-    prismaMock.plateGroupMember.findFirst.mockResolvedValue({ active: true, group: { active: true }, groupId: GROUP_ID, reason: "DEMO: verdacht voertuig" });
+    prismaMock.plateGroupMember.findMany.mockResolvedValue([{ active: true, group: { id: GROUP_ID, name: "Aandacht" }, groupId: GROUP_ID, reason: "DEMO: verdacht voertuig" }]);
     app = buildServer();
 
     const response = await app.inject({ method: "POST", url: "/simulator/passages", payload: { cameraId: CAMERA_ID, licensePlate: "12-ABC-3" } });
@@ -72,7 +74,8 @@ describe("simulator camerakeuze", () => {
     expect(response.statusCode).toBe(201);
     expect(response.json().hit).toBe(true);
     const createCall = prismaMock.passage.create.mock.calls[0]?.[0] as { data: Record<string, unknown> };
-    expect(createCall.data).toMatchObject({ cameraId: CAMERA_ID, location: "Dorpstraat 1", direction: "INCOMING", source: "DEMO", isHit: true });
+    expect(createCall.data).toMatchObject({ cameraId: CAMERA_ID, location: "Dorpstraat 1", direction: "INCOMING", source: "DEMO", isHit: false });
+    expect(prismaMock.passage.update).toHaveBeenCalledWith({ where: { id: PASSAGE_ID }, data: { isHit: true } });
     expect(prismaMock.hit.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       cameraId: CAMERA_ID, groupId: GROUP_ID, location: "Dorpstraat 1", normalizedLicensePlate: "12ABC3"
     }) });
@@ -108,5 +111,17 @@ describe("simulator camerakeuze", () => {
     expect(response.statusCode).toBe(201);
     expect(response.json().hit).toBe(false);
     expect(prismaMock.hit.create).not.toHaveBeenCalled();
+  });
+
+  it("gebruikt het gekozen tijdstip en de gekozen rijrichting", async () => {
+    app = buildServer();
+    const timestamp = "2026-09-03T20:15:00.000Z";
+
+    const response = await app.inject({ method: "POST", url: "/simulator/passages", payload: {
+      cameraId: CAMERA_ID, licensePlate: "TE-ST-1", timestamp, direction: "OUTGOING"
+    } });
+
+    expect(response.statusCode).toBe(201);
+    expect(prismaMock.passage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ timestamp: new Date(timestamp), direction: "OUTGOING", cameraId: CAMERA_ID }) });
   });
 });

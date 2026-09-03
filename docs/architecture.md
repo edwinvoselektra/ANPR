@@ -254,7 +254,7 @@ indexes ondersteunen tijdgebaseerde cleanup en latere partitionering.
 
 - tracking, slimme frame-selectie en server-OCR-provider (latere Fase 2-stap);
 - live HLS/WebRTC; de passagelijst gebruikt nu betrouwbare korte polling;
-- echte hit-, zoek-, groep- en dossierworkflows (Fase 3);
+- hit-, zoek-, groep- en dossierworkflows (gerealiseerd in Fase 3);
 - PWA/Web Push/meldkamer (Fase 4);
 - volledige retentiejobs, back-ups, monitoring en performancebeheer (Fase 5).
 
@@ -373,3 +373,57 @@ rechtstreeks verbinding met een camera. De lijst toont nieuwste eerst en markeer
 `DEMO` zichtbaar als demo. Afbeeldingen lopen via een geauthenticeerde API-route met
 object-ID/path-validatie. Polling is voor 5–10 gebruikers de eenvoudigste betrouwbare
 keuze en kan later achter dezelfde API-contracten door SSE worden vervangen.
+
+## 21. Fase 3 — kentekens, groepen, hits en analyse
+
+Fase 3 bouwt voort op de bestaande `PlateGroup` en `PlateGroupMember`-modellen. Een
+conceptueel kenteken is de verzameling memberships met dezelfde
+`normalizedLicensePlate`. Metadata wordt bij een wijziging transactioneel over alle
+memberships gelijkgetrokken. Dit voorkomt een risicovolle omzetting van bestaande data
+naar een extra tabel, terwijl één kenteken wel aan meerdere groepen kan zijn gekoppeld.
+
+`hitEnabled` staat los van toekomstige pushnotificaties. Alleen een actief kenteken dat
+op het passage-tijdstip geldig is én in een actieve groep met hitdetectie zit, matcht.
+Simulator en Dahua-ingest voeren deze controle direct na passage-aanmaak binnen dezelfde
+databasetransactie uit. Eén passage krijgt maximaal één `Hit`; `HitGroup` legt alle
+gematchte groepen en de reden op dat moment vast. Daarmee blijft hithistorie correct als
+een groep of kenteken later verandert. Push wordt nog niet verstuurd en staat daarom
+eerlijk op notificatiestatus `SKIPPED`.
+
+```text
+Simulator of Dahua NormalizedAnprEvent
+  -> Passage (één record na bestaande deduplicatie)
+  -> exacte centrale kenteken-normalisatie
+  -> actieve/geldige PlateGroupMember + actieve hitgroep
+  -> maximaal één Hit + één of meer HitGroup-koppelingen
+  -> dashboard, Hits, zoeken en kentekendossier
+```
+
+De zoek-API past alle filters in PostgreSQL toe en gebruikt begrensde paginering.
+Kentekenfilters worden vóór de query centraal genormaliseerd. Datum- en tijdfilters
+worden als Nederlandse lokale kalenderintervallen naar UTC vertaald; ook een nachtelijk
+venster zoals 22:00–03:00 werkt over middernacht. Voor tijdvensters geldt een veilige
+maximale periode van 92 dagen.
+
+Leesroutes vereisen `passages.view` of `hits.view`. Mutaties op kentekens en groepen
+vereisen altijd `plates.manage` in de API. Administrator en Operator krijgen deze
+permission via het bestaande rollenmodel; Viewer niet. De browser verbergt beheerknoppen
+zonder permission, maar is niet de beveiligingsgrens. Mutaties schrijven via de bestaande
+auditinfrastructuur geen secrets en geen camera-credentials.
+
+De migratie `20260903000100_plate_management_hits_search` is uitsluitend additief. Ze
+voegt `hitEnabled`, `HitGroup`, één-hit-per-passage en zoekindexes toe en neemt bestaande
+primaire hitgroepen over. Er is geen database-reset nodig. Verwijderen van een actief
+kenteken verwijdert de memberships daadwerkelijk; passages en auditregels blijven
+historie. Een groep met bestaande hithistorie wordt bij verwijderen gedeactiveerd in
+plaats van de historische koppeling te verbreken.
+
+De reparatiemigratie `20260903000200_fix_empty_plate_validity` corrigeert een vroege
+Fase 3-validatiefout: `null` werd door datumcoercion als Unix-epoch opgeslagen. Alleen
+exacte epochwaarden in de twee optionele geldigheidsvelden worden teruggezet naar
+`NULL`. Nieuwe API-input controleert voortaan `null` vóór datumcoercion. Een leeg
+optioneel groepsicoon wordt eveneens expliciet als `NULL` behandeld, zodat bestaande
+seed- en demogroepen normaal bewerkbaar zijn.
+
+Web Push/PWA, live browservideo, server-OCR, retentiescheduler en productiedeployment
+vallen uitdrukkelijk buiten deze fase.

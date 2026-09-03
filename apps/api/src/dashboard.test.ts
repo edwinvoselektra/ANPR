@@ -5,7 +5,7 @@ const prismaMock = vi.hoisted(() => ({
   camera: { count: vi.fn(), findMany: vi.fn() },
   passage: { count: vi.fn(), findMany: vi.fn() },
   hit: { count: vi.fn(), findMany: vi.fn() },
-  plateGroupMember: { count: vi.fn() }
+  plateGroupMember: { findMany: vi.fn() }
 }));
 
 vi.mock("./lib/prisma.js", () => ({ prisma: prismaMock }));
@@ -25,7 +25,7 @@ describe("dashboard Laatste hits", () => {
     prismaMock.camera.count.mockResolvedValue(2);
     prismaMock.passage.count.mockResolvedValue(1);
     prismaMock.hit.count.mockResolvedValue(1);
-    prismaMock.plateGroupMember.count.mockResolvedValue(1);
+    prismaMock.plateGroupMember.findMany.mockResolvedValue([{ normalizedLicensePlate: "12ABC3" }]);
     prismaMock.passage.findMany.mockResolvedValue([]);
     prismaMock.hit.findMany.mockResolvedValue([{
       id: "22222222-2222-4222-8222-222222222222", normalizedLicensePlate: "12ABC3", timestamp: new Date("2026-08-28T10:00:00Z"),

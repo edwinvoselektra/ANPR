@@ -13,6 +13,10 @@ describe("kentekennormalisatie", () => {
   it("corrigeert O en 0 niet blind", () => {
     expect(normalizeLicensePlate("O0-I1-B8")).toBe("O0I1B8");
   });
+
+  it("normaliseert een V84KVJ-achtig kenteken zonder streepjes identiek", () => {
+    expect(normalizeLicensePlate("v84kvj")).toBe("V84KVJ");
+  });
 });
 
 describe("retentie en hitbeslissing", () => {
@@ -24,6 +28,8 @@ describe("retentie en hitbeslissing", () => {
     const now = new Date("2026-01-10T12:00:00.000Z");
     expect(shouldCreateHit({ active: true, groupActive: true, validUntil: new Date("2026-01-11") }, now)).toBe(true);
     expect(shouldCreateHit({ active: false, groupActive: true }, now)).toBe(false);
+    expect(shouldCreateHit({ active: true, groupActive: false }, now)).toBe(false);
+    expect(shouldCreateHit({ active: true, groupActive: true, validFrom: new Date("2026-01-11") }, now)).toBe(false);
     expect(shouldCreateHit({ active: true, groupActive: true, validUntil: new Date("2026-01-09") }, now)).toBe(false);
   });
 });

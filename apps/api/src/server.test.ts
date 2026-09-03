@@ -27,6 +27,17 @@ describe("API integratie", () => {
     expect(image.statusCode).toBe(401);
   });
 
+  it("beschermt kentekens, groepen, hits en zoeken met authenticatie/RBAC", async () => {
+    app = buildServer();
+    const responses = await Promise.all([
+      app.inject({ method: "GET", url: "/plates" }),
+      app.inject({ method: "GET", url: "/plate-groups" }),
+      app.inject({ method: "GET", url: "/hits" }),
+      app.inject({ method: "GET", url: "/search/passages" })
+    ]);
+    expect(responses.map((response) => response.statusCode)).toEqual([401, 401, 401, 401]);
+  });
+
   it("geeft bij een lege JSON-body geen rauwe Fastify-fout terug", async () => {
     app = buildServer();
     const response = await app.inject({ method: "POST", url: "/cameras/camera-id/test", headers: { "content-type": "application/json" } });

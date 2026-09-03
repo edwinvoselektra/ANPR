@@ -14,6 +14,10 @@ import { dashboardRoutes } from "./routes/dashboard.js";
 import { healthRoutes } from "./routes/health.js";
 import { simulatorRoutes } from "./routes/simulator.js";
 import { passageRoutes } from "./routes/passages.js";
+import { hitRoutes } from "./routes/hits.js";
+import { plateGroupRoutes } from "./routes/plate-groups.js";
+import { plateRoutes } from "./routes/plates.js";
+import { searchRoutes } from "./routes/search.js";
 import { userRoutes } from "./routes/users.js";
 
 export function buildServer() {
@@ -65,6 +69,10 @@ export function buildServer() {
   void app.register(dashboardRoutes);
   void app.register(simulatorRoutes);
   void app.register(passageRoutes);
+  void app.register(plateGroupRoutes);
+  void app.register(plateRoutes);
+  void app.register(hitRoutes);
+  void app.register(searchRoutes);
   return app;
 }
 

@@ -50,8 +50,8 @@ async function seedDemo() {
       displayOrder: index, active: true, status: "ONLINE", rtspHost: `demo-${index + 1}.invalid`, rtspPath: "/demo"
     }}));
   }
-  const group = await prisma.plateGroup.upsert({ where: { name: "Aandacht" }, update: {}, create: {
-    name: "Aandacht", description: "DEMO-signaleringsgroep", color: "#dc2626", pushNotifications: true, reasonRequired: true
+  const group = await prisma.plateGroup.upsert({ where: { name: "Aandacht" }, update: { hitEnabled: true, reasonRequired: true }, create: {
+    name: "Aandacht", description: "DEMO-signaleringsgroep", color: "#dc2626", hitEnabled: true, pushNotifications: false, reasonRequired: true
   }});
   const normalized = normalizeLicensePlate("12-ABC-3");
   await prisma.plateGroupMember.upsert({
@@ -76,7 +76,8 @@ async function seedDemo() {
       }});
       if (isHit) await prisma.hit.create({ data: {
         passageId: passage.id, cameraId: camera.id, groupId: group.id, normalizedLicensePlate: norm,
-        location: camera.location, timestamp, reason: "DEMO: verdacht voertuig gemeld in de buurt", notificationStatus: "SKIPPED"
+        location: camera.location, timestamp, reason: "DEMO: verdacht voertuig gemeld in de buurt", notificationStatus: "SKIPPED",
+        groups: { create: { groupId: group.id, reason: "DEMO: verdacht voertuig gemeld in de buurt" } }
       }});
     }
   }

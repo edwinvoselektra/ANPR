@@ -12,11 +12,11 @@ export async function dashboardRoutes(app: FastifyInstance) {
       prisma.camera.count({ where: { active: true, status: "ONLINE" } }),
       prisma.passage.count({ where: { timestamp: { gte: start }, status: "ACTIVE" } }),
       prisma.hit.count({ where: { timestamp: { gte: start } } }),
-      prisma.plateGroupMember.count({ where: { active: true, group: { active: true } } }),
-      prisma.passage.findMany({ take: 8, orderBy: { timestamp: "desc" }, include: { camera: { select: { name: true } } } }),
+      prisma.plateGroupMember.findMany({ where: { active: true, group: { active: true, hitEnabled: true } }, distinct: ["normalizedLicensePlate"], select: { normalizedLicensePlate: true } }),
+      prisma.passage.findMany({ where: { status: "ACTIVE" }, take: 8, orderBy: { timestamp: "desc" }, include: { camera: { select: { name: true } } } }),
       prisma.hit.findMany({ take: 5, orderBy: { timestamp: "desc" }, include: { camera: { select: { name: true } }, group: { select: { name: true, color: true } } } }),
       prisma.camera.findMany({ where: { active: true, status: { in: ["OFFLINE", "CONNECTION_PROBLEM", "ANPR_UNAVAILABLE"] } }, select: { id: true, name: true, status: true, lastConnectionError: true } })
     ]);
-    return { counters: { cameraTotal, cameraOnline, passagesToday, hitsToday, watchedPlates }, recentPassages, recentHits, cameraProblems };
+    return { counters: { cameraTotal, cameraOnline, passagesToday, hitsToday, watchedPlates: watchedPlates.length }, recentPassages, recentHits, cameraProblems };
   });
 }
