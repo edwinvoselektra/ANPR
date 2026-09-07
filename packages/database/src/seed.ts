@@ -7,6 +7,8 @@ const permissionDescriptions: Record<string, string> = {
   [PERMISSIONS.USERS_MANAGE]: "Gebruikers en rollen beheren",
   [PERMISSIONS.CAMERAS_MANAGE]: "Camera's toevoegen, wijzigen, testen en verwijderen",
   [PERMISSIONS.CAMERAS_VIEW]: "Camera's en camerastatus bekijken",
+  [PERMISSIONS.LOCATIONS_MANAGE]: "VPN-locaties beheren en verbindingen testen",
+  [PERMISSIONS.LOCATIONS_VIEW]: "VPN-locaties en verbindingsstatus bekijken",
   [PERMISSIONS.PASSAGES_VIEW]: "Passages en dashboard bekijken",
   [PERMISSIONS.PLATES_MANAGE]: "Kentekens en groepen beheren",
   [PERMISSIONS.HITS_VIEW]: "Hits bekijken",
@@ -18,7 +20,7 @@ const permissionDescriptions: Record<string, string> = {
 
 const rolePermissions: Record<string, string[]> = {
   Administrator: Object.values(PERMISSIONS),
-  Operator: [PERMISSIONS.CAMERAS_VIEW, PERMISSIONS.PASSAGES_VIEW, PERMISSIONS.PLATES_MANAGE, PERMISSIONS.HITS_VIEW, PERMISSIONS.SIMULATOR_RUN],
+  Operator: [PERMISSIONS.CAMERAS_VIEW, PERMISSIONS.LOCATIONS_VIEW, PERMISSIONS.PASSAGES_VIEW, PERMISSIONS.PLATES_MANAGE, PERMISSIONS.HITS_VIEW, PERMISSIONS.SIMULATOR_RUN],
   Viewer: [PERMISSIONS.CAMERAS_VIEW, PERMISSIONS.PASSAGES_VIEW, PERMISSIONS.HITS_VIEW]
 };
 

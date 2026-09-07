@@ -16,4 +16,5 @@ describe("authenticatie en permissions", () => {
     expect(isAuthorized(viewer, PERMISSIONS.USERS_MANAGE)).toBe(false);
     expect(isAuthorized(viewer, PERMISSIONS.CAMERAS_VIEW)).toBe(true);
   });
+  it("laat een Operator locatiestatus bekijken maar niet beheren",()=>{const operator=[PERMISSIONS.LOCATIONS_VIEW];expect(isAuthorized(operator,PERMISSIONS.LOCATIONS_VIEW)).toBe(true);expect(isAuthorized(operator,PERMISSIONS.LOCATIONS_MANAGE)).toBe(false)});
 });

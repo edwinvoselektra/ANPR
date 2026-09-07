@@ -62,6 +62,10 @@ async function checks() {
   status.videoWorker = videoWorkerStatus(workerHeartbeat);
   status.anprWorker = anprWorkerStatus(anprHeartbeat);
   status.webPush = { status: pushConfiguration.state === "online" ? "healthy" : pushConfiguration.state, message: pushConfiguration.message };
+  const locationCount = await prisma.vpnLocation.count().catch(() => 0);
+  status.vpnSubsystem = config.VPN_STATUS_FILE
+    ? { status: "healthy", message: `${locationCount} locatie${locationCount === 1 ? "" : "s"}; handshake-adapter ingesteld.` }
+    : { status: "not_configured", message: `${locationCount} locatie${locationCount === 1 ? "" : "s"}; geen veilige WireGuard-statusadapter ingesteld.` };
   return status;
 }
 
@@ -73,7 +77,7 @@ export async function healthRoutes(app: FastifyInstance) {
     return reply.code(ready ? 200 : 503).send({ status: ready ? "ready" : "degraded", services });
   });
   app.get("/system/status", { preHandler: requirePermission(PERMISSIONS.SYSTEM_VIEW) }, async () => {
-    const [services, cameras] = await Promise.all([
+    const [services, cameras, locations] = await Promise.all([
       checks(),
       prisma.camera.findMany({
         select: {
@@ -83,8 +87,9 @@ export async function healthRoutes(app: FastifyInstance) {
           lastAnprEventAt: true, lastAnprErrorCode: true
         },
         orderBy: [{ displayOrder: "asc" }, { name: "asc" }]
-      })
+      }),
+      prisma.vpnLocation.findMany({select:{id:true,name:true,routerType:true,connectionStatus:true,tunnelOnline:true,recorderReachable:true,recorderPortOpen:true,lastHandshakeAt:true,lastCheckedAt:true,_count:{select:{cameras:true}}},orderBy:{name:"asc"}})
     ]);
-    return { services, cameras, demoMode: config.DEMO_MODE, version: "0.2.4" };
+    return { services, cameras, locations, demoMode: config.DEMO_MODE, version: "0.2.4.5" };
   });
 }

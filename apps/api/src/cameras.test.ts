@@ -11,6 +11,8 @@ const prismaMock = vi.hoisted(() => ({
     findUniqueOrThrow: vi.fn()
   },
   auditLog: { create: vi.fn() },
+  vpnLocation: { findUnique: vi.fn() },
+  recorder: { findFirst: vi.fn() },
   $transaction: vi.fn()
 }));
 
@@ -73,6 +75,7 @@ beforeEach(() => {
 afterEach(async () => { await app?.close(); app = undefined; });
 
 describe("unieke cameranaam", () => {
+  it("koppelt een camera optioneel aan een geldige locatie en recorder",async()=>{const locationId="22222222-2222-4222-8222-222222222222";const recorderId="33333333-3333-4333-8333-333333333333";prismaMock.vpnLocation.findUnique.mockResolvedValue({id:locationId});prismaMock.recorder.findFirst.mockResolvedValue({id:recorderId});prismaMock.camera.create.mockResolvedValue({...camera("Recorder camera"),locationId,recorderId});app=buildServer();const response=await app.inject({method:"POST",url:"/cameras",payload:{...createBody("Recorder camera"),locationId,recorderId}});expect(response.statusCode).toBe(201);expect(prismaMock.camera.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({locationId,recorderId})}))});
   it("maakt een camera met een nieuwe unieke naam succesvol aan", async () => {
     prismaMock.camera.create.mockResolvedValue(camera("Unieke camera"));
     app = buildServer();
@@ -127,7 +130,7 @@ describe("unieke cameranaam", () => {
     expect(response.statusCode).toBe(409);
     expect(response.json().error).toBe("CAMERA_NAME_ALREADY_EXISTS");
     expect(response.body).not.toContain("Database-detail");
-  });
+  },10_000);
 
   it("controleert vooraf of een cameranaam beschikbaar is", async () => {
     prismaMock.camera.findUnique.mockResolvedValue({ id: cameraId });

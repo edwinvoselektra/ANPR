@@ -1,0 +1,13 @@
+.location-card{display:grid;gap:18px}
+.location-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.location-heading h2{margin:0 0 4px}
+.location-heading p{margin:0;color:var(--muted)}
+.camera-location-link{margin-bottom:18px}
+.camera-location-link h2{margin-top:0}
+.er605-steps{display:grid;gap:22px;margin-top:20px}
+.er605-steps>div:not(.alert){border-top:1px solid var(--line);padding-top:16px}
+.config-value{display:grid;grid-template-columns:190px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.config-value>span{font-size:13px;color:var(--muted)}
+.config-value code{overflow-wrap:anywhere;background:#f1f5f9;padding:8px;border-radius:6px}
+.config-value .button{padding:7px 10px}
+@media(max-width:800px){.config-value{grid-template-columns:1fr}.config-value .button{justify-self:start}}

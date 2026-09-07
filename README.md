@@ -305,6 +305,30 @@ VIDEO_WORKER_PORT=4100
 `VIDEO_SAMPLE_FPS` accepteert maximaal `1`. Verhoog dit niet zonder eerst CPU-, netwerk-
 en camerabelasting te controleren.
 
+## Fase 2.4.5 VPN-locaties
+
+Administrators beheren onder **Locaties** een ER605/andere WireGuard-locatie,
+adresplan, recorder en configuratiewizard. Operators kunnen de locatie- en
+verbindingsstatus bekijken. Camera's blijven standalone mogelijk en kunnen optioneel
+aan een locatie/recorder worden gekoppeld. De volledige handmatige routerhandleiding
+staat in [docs/er605-wireguard-setup.md](docs/er605-wireguard-setup.md).
+
+Voeg voor lokale ontwikkeling desgewenst aan `.env` toe:
+
+```dotenv
+VPN_TUNNEL_CIDR=10.100.0.0/24
+VPN_SERVER_ADDRESS=10.100.0.1
+VPN_SERVER_ENDPOINT=
+VPN_LISTEN_PORT=51820
+VPN_HEALTH_INTERVAL_SECONDS=30
+VPN_HEALTH_TIMEOUT_MS=2000
+VPN_STATUS_FILE=
+```
+
+Er wordt geen routerwachtwoord opgeslagen. Docker krijgt geen `NET_ADMIN` of
+`privileged`; echte WireGuard-routing draait in de lokale opzet op de WSL/Windows-host.
+Na deze fase start Fase 2.5 Live camera's nadrukkelijk nog niet.
+
 ## Database en migraties
 
 Migraties worden bij `docker compose up` automatisch uitgevoerd door de eenmalige
@@ -404,9 +428,10 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 - [Resultaat Fase 2.1](docs/PHASE2.1-RESULT.md)
 - [Resultaat Fase 2.2](docs/PHASE2.2-RESULT.md)
 - [Resultaat Fase 3](docs/PHASE3-RESULT.md)
+- [Resultaat Fase 2.4.5](docs/PHASE2.4.5-RESULT.md)
+- [ER605 WireGuard instellen](docs/er605-wireguard-setup.md)
 
-## Volgende fase
+## Stop na Fase 2.4.5
 
-Na handmatige goedkeuring van Fase 3 kan een volgende, afzonderlijk afgesproken fase
-worden gestart. Push/PWA, live browservideo, server-OCR, retentiescheduler en productie-
-deployment zijn niet automatisch gestart.
+Fase 2.5 Live camera's, server-OCR en productiedeployment zijn niet gestart. Eerst
+volgt de handmatige ER605- en recorder-test uit de handleiding.

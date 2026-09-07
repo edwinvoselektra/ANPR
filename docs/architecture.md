@@ -468,3 +468,29 @@ De outboxgrens maakt latere verplaatsing naar een aparte schaalbare notification
 mogelijk zonder hitproducenten of frontendcontracten te wijzigen. Ontbrekende VAPID-
 configuratie wordt op Systeemstatus als `not_configured` getoond en laat hits `PENDING`,
 zodat het platform niet crasht en ze na configuratie alsnog verwerkt kunnen worden.
+
+## 23. Fase 2.4.5 — VPN-locaties en ER605-wizard
+
+`VpnLocation` scheidt een fysieke locatie en zijn generieke VPN/routergegevens van
+`Recorder` en `Camera`. Een camera houdt zijn bestaande vrije locatietekst en kan
+daarnaast optioneel via `locationId` en `recorderId` worden gekoppeld. Bestaande en
+standalone camera's blijven daardoor intact. Foreign keys gebruiken `Restrict`; een
+locatie met camera's kan niet stilzwijgend worden verwijderd.
+
+De standaardtopologie is Mode B: ER605 initieert WireGuard uitgaand naar de centrale
+server. Mode A is als configuratiekeuze voorbereid. Het centrale endpoint is
+configuratie en geen eigenschap die hard in camera's zit. Daardoor kan een latere
+cloudserver worden ingevoerd zonder alle locaties opnieuw te modelleren.
+
+WireGuard gebruikt X25519-keypairs. De centrale en locatie-private keys worden met de
+bestaande AES-256-GCM secretlaag encrypted-at-rest opgeslagen. De centrale private key
+verlaat de API nooit. Een nieuwe locatie-private key verschijnt technisch noodzakelijk
+eenmalig in de directe generatierespons om hem handmatig op de ER605 te installeren;
+daarna leveren GET- en nieuwe generatieresponses hem niet uit. Auditdata en logs
+filteren secret-, password-, credential-, token- en private-keyvelden.
+
+De API-container beheert geen WireGuard-interface en krijgt geen `NET_ADMIN` of
+`privileged`. Een optionele alleen-lezen statusfile-adapter levert handshake-tijden.
+Recorderbereikbaarheid gebruikt uitsluitend de opgeslagen recorder en RTSP-poort met
+een korte TCP-timeout; er is geen ping- of subnetscan. Iedere locatiecheck is geïsoleerd
+met `Promise.allSettled`, zodat één storing de rest niet blokkeert.

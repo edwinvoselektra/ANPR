@@ -18,6 +18,7 @@ describe("API integratie", () => {
     const response = await app.inject({ method: "GET", url: "/users" });
     expect(response.statusCode).toBe(401);
   });
+  it("beschermt locatiebeheer en statustonen met authenticatie/RBAC",async()=>{app=buildServer();const [list,create,test]=await Promise.all([app.inject({method:"GET",url:"/locations"}),app.inject({method:"POST",url:"/locations",payload:{}}),app.inject({method:"POST",url:"/locations/11111111-1111-4111-8111-111111111111/test"})]);expect([list.statusCode,create.statusCode,test.statusCode]).toEqual([401,401,401])});
 
   it("beschermt live passages en passagefoto's met authenticatie/RBAC", async () => {
     app = buildServer();

@@ -30,6 +30,7 @@ const cameraBody = connection.and(z.object({
   anprHttpProtocol: z.enum(["http", "https"]).default("http"),
   anprHttpPort: z.coerce.number().int().min(1).max(65535).default(80),
   anprChannel: z.coerce.number().int().min(1).max(64).default(1)
+  ,locationId: z.string().uuid().nullable().optional(), recorderId: z.string().uuid().nullable().optional()
 }));
 const updateBody = z.object({
   name: z.string().trim().min(2).max(100).optional(), location: z.string().trim().min(2).max(150).optional(),
@@ -42,7 +43,19 @@ const updateBody = z.object({
   rtspPath: z.string().max(1000).optional(), username: z.string().max(200).optional(), password: z.string().max(500).optional()
   , anprProvider: z.enum(["NONE", "DAHUA_CGI"]).optional(), anprHttpProtocol: z.enum(["http", "https"]).optional(),
   anprHttpPort: z.coerce.number().int().min(1).max(65535).optional(), anprChannel: z.coerce.number().int().min(1).max(64).optional()
+  , locationId: z.string().uuid().nullable().optional(), recorderId: z.string().uuid().nullable().optional()
 });
+
+async function validateLocationLink(locationId?: string|null, recorderId?: string|null) {
+  if (!locationId && recorderId) throw Object.assign(new Error("Kies ook de locatie van deze recorder."), { statusCode: 400 });
+  if (!locationId) return;
+  const location = await prisma.vpnLocation.findUnique({ where: { id: locationId }, select: { id: true } });
+  if (!location) throw Object.assign(new Error("De gekozen locatie bestaat niet."), { statusCode: 400 });
+  if (recorderId) {
+    const recorder = await prisma.recorder.findFirst({ where: { id: recorderId, locationId }, select: { id: true } });
+    if (!recorder) throw Object.assign(new Error("De gekozen recorder hoort niet bij deze locatie."), { statusCode: 400 });
+  }
+}
 
 function capabilities(provider: "NONE" | "DAHUA_CGI") {
   return { rtsp: true, snapshot: true, cameraAnpr: provider !== "NONE", eventStream: provider !== "NONE", plateCrop: provider !== "NONE", vehicleMetadata: provider !== "NONE" };
@@ -67,6 +80,7 @@ export async function cameraRoutes(app: FastifyInstance) {
 
   app.post("/cameras", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request, reply) => {
     const body = cameraBody.parse(request.body);
+    await validateLocationLink(body.locationId, body.recorderId);
     const connectionData = encryptedConnection(body);
     const camera = await prisma.camera.create({ data: {
       name: body.name, location: body.location, description: body.description, direction: body.direction,
@@ -76,6 +90,7 @@ export async function cameraRoutes(app: FastifyInstance) {
       anprProvider: body.anprProvider, anprHttpProtocol: body.anprHttpProtocol, anprHttpPort: body.anprHttpPort,
       anprChannel: body.anprChannel, anprConnectionStatus: body.active && body.anprProvider !== "NONE" ? "CONNECTING" : "DISABLED",
       capabilities: capabilities(body.anprProvider),
+      locationId: body.locationId, recorderId: body.recorderId,
       zones: body.zone ? { create: { type: body.zone.type, points: body.zone.points } } : undefined
     }, include: { zones: true } });
     await audit(request, "CAMERA_CREATED", { objectType: "Camera", objectId: camera.id, newValue: publicCamera(camera) });
@@ -86,6 +101,7 @@ export async function cameraRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const body = updateBody.parse(request.body);
     const current = await prisma.camera.findUniqueOrThrow({ where: { id }, include: { zones: true } });
+    await validateLocationLink(body.locationId === undefined ? current.locationId : body.locationId, body.recorderId === undefined ? current.recorderId : body.recorderId);
     let connectionData = {};
     if (body.connectionMode || body.rtspUrl || body.rtspHost) {
       connectionData = encryptedConnection({
@@ -115,6 +131,7 @@ export async function cameraRoutes(app: FastifyInstance) {
         anprConnectionStatus: body.active === false || body.anprProvider === "NONE" ? "DISABLED"
           : body.anprProvider === "DAHUA_CGI" || body.active === true ? "CONNECTING" : undefined,
         capabilities: body.anprProvider ? capabilities(body.anprProvider) : undefined,
+        locationId: body.locationId, recorderId: body.locationId === null ? null : body.recorderId,
         ...connectionData
       }, include: { zones: true } });
     });

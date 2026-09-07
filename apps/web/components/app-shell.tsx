@@ -17,6 +17,7 @@ const items: readonly NavigationItem[] = [
   { href: "/plates", icon: "plate", label: "Kentekens", permission: PERMISSIONS.PASSAGES_VIEW },
   { href: "/groups", icon: "groups", label: "Groepen", permission: PERMISSIONS.PASSAGES_VIEW },
   { href: "/cameras", icon: "camera", label: "Camera’s" },
+  { href: "/locations", icon: "location", label: "Locaties", permission: PERMISSIONS.LOCATIONS_VIEW },
   { href: "/users", icon: "users", label: "Gebruikers", permission: PERMISSIONS.USERS_MANAGE },
   { href: "/simulator", icon: "demo", label: "Demo / simulator", permission: PERMISSIONS.SIMULATOR_RUN },
   { href: "/system", icon: "health", label: "Systeemstatus", permission: PERMISSIONS.SYSTEM_VIEW }

@@ -91,6 +91,28 @@ enum NotificationStatus {
   SKIPPED
 }
 
+enum LocationRouterType {
+  TP_LINK_OMADA_ER605
+  MANUAL_OTHER
+}
+
+enum VpnType {
+  WIREGUARD
+}
+
+enum VpnMode {
+  SERVER_TO_LOCATION
+  LOCATION_TO_SERVER
+}
+
+enum LocationConnectionStatus {
+  UNKNOWN
+  CONNECTING
+  ONLINE
+  DEGRADED
+  OFFLINE
+}
+
 model User {
   id                 String               @id @default(uuid()) @db.Uuid
   email              String               @unique
@@ -209,9 +231,65 @@ model Camera {
   zones                    CameraZone[]
   passages                 Passage[]
   hits                     Hit[]
+  locationId               String?              @db.Uuid
+  recorderId               String?              @db.Uuid
+  vpnLocation              VpnLocation?          @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  recorder                 Recorder?             @relation(fields: [recorderId], references: [id], onDelete: Restrict)
 
   @@index([active, displayOrder])
   @@index([status])
+  @@index([locationId])
+  @@index([recorderId])
+}
+
+model VpnLocation {
+  id                         String                   @id @default(uuid()) @db.Uuid
+  name                       String                   @unique
+  description                String?
+  routerType                 LocationRouterType
+  vpnType                    VpnType                  @default(WIREGUARD)
+  vpnMode                    VpnMode                  @default(LOCATION_TO_SERVER)
+  tunnelAddress              String                   @unique
+  remoteLanCidr              String
+  remoteGatewayIp            String?
+  endpointHost               String?
+  listenPort                 Int                      @default(51820)
+  mtu                        Int                      @default(1420)
+  active                     Boolean                  @default(true)
+  publicKey                  String?
+  privateKeyEncrypted        String?
+  connectionStatus           LocationConnectionStatus @default(UNKNOWN)
+  tunnelOnline               Boolean?
+  routeReachable             Boolean?
+  recorderReachable          Boolean?
+  recorderPortOpen           Boolean?
+  lastHandshakeAt            DateTime?
+  lastSeenAt                 DateTime?
+  lastCheckedAt              DateTime?
+  lastHealthErrorCode        String?
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+  recorders                  Recorder[]
+  cameras                    Camera[]
+
+  @@index([active, name])
+  @@index([connectionStatus])
+}
+
+model Recorder {
+  id             String      @id @default(uuid()) @db.Uuid
+  locationId     String      @db.Uuid
+  name           String
+  ipAddress      String
+  rtspPort       Int         @default(554)
+  channelCount   Int?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  location       VpnLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  cameras        Camera[]
+
+  @@unique([locationId, name])
+  @@index([locationId])
 }
 
 model CameraZone {

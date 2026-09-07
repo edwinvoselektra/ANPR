@@ -2,6 +2,8 @@ export const PERMISSIONS = {
   USERS_MANAGE: "users.manage",
   CAMERAS_MANAGE: "cameras.manage",
   CAMERAS_VIEW: "cameras.view",
+  LOCATIONS_MANAGE: "locations.manage",
+  LOCATIONS_VIEW: "locations.view",
   PASSAGES_VIEW: "passages.view",
   PLATES_MANAGE: "plates.manage",
   HITS_VIEW: "hits.view",

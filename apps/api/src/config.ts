@@ -13,6 +13,13 @@ const schema = z.object({
   VAPID_PUBLIC_KEY: z.string().trim().optional().transform((value) => value || undefined),
   VAPID_PRIVATE_KEY: z.string().trim().optional().transform((value) => value || undefined),
   VAPID_SUBJECT: z.string().trim().optional().transform((value) => value || undefined)
+  ,VPN_TUNNEL_CIDR: z.string().default("10.100.0.0/24")
+  ,VPN_SERVER_ADDRESS: z.string().default("10.100.0.1")
+  ,VPN_SERVER_ENDPOINT: z.string().trim().optional().transform((value) => value || undefined)
+  ,VPN_LISTEN_PORT: z.coerce.number().int().min(1).max(65535).default(51820)
+  ,VPN_HEALTH_INTERVAL_SECONDS: z.coerce.number().int().min(10).max(3600).default(30)
+  ,VPN_HEALTH_TIMEOUT_MS: z.coerce.number().int().min(250).max(10000).default(2000)
+  ,VPN_STATUS_FILE: z.string().trim().optional().transform((value) => value || undefined)
 });
 
 const parsed = schema.safeParse(process.env);

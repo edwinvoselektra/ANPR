@@ -5,9 +5,10 @@ import { describe, expect, it } from "vitest";
 const schema = readFileSync(resolve(process.cwd(), "prisma/schema.prisma"), "utf8");
 
 describe("Prisma-datamodel", () => {
-  it.each(["User", "Role", "Permission", "UserSession", "Camera", "CameraZone", "Passage", "Vehicle", "PlateDetection", "PlateGroup", "PlateGroupMember", "Hit", "HitGroup", "Notification", "PushSubscription", "NotificationPreference", "NotificationPreferenceGroup", "AuditLog", "SystemSetting", "RetentionException"])("bevat model %s", (model) => {
+  it.each(["User", "Role", "Permission", "UserSession", "Camera", "CameraZone", "VpnLocation", "Recorder", "Passage", "Vehicle", "PlateDetection", "PlateGroup", "PlateGroupMember", "Hit", "HitGroup", "Notification", "PushSubscription", "NotificationPreference", "NotificationPreferenceGroup", "AuditLog", "SystemSetting", "RetentionException"])("bevat model %s", (model) => {
     expect(schema).toContain(`model ${model} {`);
   });
+  it("koppelt camera's optioneel en veilig aan locatie en recorder",()=>{expect(schema).toMatch(/locationId\s+String\?/);expect(schema).toMatch(/vpnLocation\s+VpnLocation\?\s+@relation\([^\n]*onDelete: Restrict\)/);expect(schema).toMatch(/recorder\s+Recorder\?\s+@relation\([^\n]*onDelete: Restrict\)/)});
   it("slaat afbeeldingen alleen als object-ID op", () => {
     expect(schema).not.toMatch(/Bytes/);
     expect(schema).toContain("vehicleImage1ObjectId");
