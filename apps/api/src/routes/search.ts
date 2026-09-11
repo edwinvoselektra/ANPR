@@ -1,3 +1,4 @@
+import { historicalCamera } from "../lib/historical-camera.js";
 import type { CameraDirection, VehicleColor, VehicleType } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -87,12 +88,12 @@ export async function searchRoutes(app: FastifyInstance) {
     const select = {
       id: true, displayLicensePlate: true, normalizedLicensePlate: true, timestamp: true, location: true,
       direction: true, vehicleColor: true, vehicleType: true, vehicleImage1ObjectId: true,
-      plateImageObjectId: true, isHit: true, source: true, camera: { select: { id: true, name: true, location: true } }
+      plateImageObjectId: true, isHit: true, source: true, camera: { select: { id: true, name: true, historicalName: true, location: true } }
     } as const;
     const [passages, total] = await Promise.all([
       prisma.passage.findMany({ where, select, orderBy: [{ timestamp: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit }),
       prisma.passage.count({ where })
     ]);
-    return reply.header("Cache-Control", "private, no-store").send({ passages, page: query.page, limit: query.limit, total });
+    return reply.header("Cache-Control", "private, no-store").send({ passages: passages.map(historicalCamera), page: query.page, limit: query.limit, total });
   });
 }

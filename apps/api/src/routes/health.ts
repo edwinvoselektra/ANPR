@@ -80,11 +80,12 @@ export async function healthRoutes(app: FastifyInstance) {
     const [services, cameras, locations] = await Promise.all([
       checks(),
       prisma.camera.findMany({
+        where: { archivedAt: null },
         select: {
           id: true, name: true, location: true, active: true, status: true,
           lastConnectionAt: true, lastConnectionSuccessAt: true, lastConnectionErrorCode: true
           , anprProvider: true, anprConnectionStatus: true, lastAnprConnectionAt: true,
-          lastAnprEventAt: true, lastAnprErrorCode: true
+          lastAnprEventAt: true, lastAnprErrorCode: true, lastAnprError: true, lastSnapshotObjectId: true
         },
         orderBy: [{ displayOrder: "asc" }, { name: "asc" }]
       }),

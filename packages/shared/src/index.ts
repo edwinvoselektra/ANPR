@@ -38,3 +38,14 @@ export function calculatePassageExpiry(timestamp: Date, retentionDays = 14): Dat
 export function shouldCreateHit(member: { active: boolean; groupActive: boolean; validFrom?: Date | null; validUntil?: Date | null }, now = new Date()): boolean {
   return member.active && member.groupActive && (!member.validFrom || member.validFrom <= now) && (!member.validUntil || member.validUntil >= now);
 }
+
+/** Accept a bare host or a camera URL without credentials, paths or query. */
+export function normalizeCameraHost(value: string): string {
+  const input = value.trim();
+  try {
+    const url = new URL(input.includes("://") ? input : `http://${input}`);
+    if (!["http:", "https:", "rtsp:", "rtsps:"].includes(url.protocol) || url.username || url.password || url.port || (url.pathname && url.pathname !== "/") || url.search || url.hash || !url.hostname) throw new Error();
+    if (!/^(?:[a-z0-9-]+\.)*[a-z0-9-]+$/i.test(url.hostname) && !/^\[[a-f0-9:]+\]$/i.test(url.hostname)) throw new Error();
+    return url.hostname;
+  } catch { throw new Error("Vul een geldig hostadres in, zonder credentials, poort, pad of query. Gebruik voor een volledige RTSP-URL de URL-optie."); }
+}

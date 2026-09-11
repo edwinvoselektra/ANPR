@@ -140,12 +140,12 @@ opslaan. Daardoor kan een gebruiker eerst de videoverbinding herstellen en pas d
 een betrouwbaar herkenningsgebied tekenen. Camerastatus wordt afgeleid uit actiefstatus,
 laatste testresultaat en offline-timeout.
 
-Camera-delete is idempotent: een bestaande camera zonder historie en zijn versleutelde
-credentials worden als één databaserij verwijderd; een reeds ontbrekende UUID geeft
-eveneens HTTP 204. CameraZones mogen daarbij cascaderen. Passages en Hits gebruiken
-`Restrict` en blokkeren fysieke verwijdering, zodat historische registraties nooit
-onbedoeld verdwijnen. Het cameraoverzicht gebruikt geen gecachte API-respons en verwijdert
-een succesvol verwijderde camera direct uit de lokale UI-state.
+Camera-delete is idempotent en archiveert de camerareferentie. De actieve configuratie,
+credentials, zones en device-connections worden verwijderd; de oorspronkelijke naam
+blijft voor historische weergave beschikbaar. Passages en Hits behouden hun `Restrict`-
+relaties. ADMIN/Administrator kan verwijderen zonder historische registraties te wissen.
+De naam wordt vrijgegeven; workers stoppen bij de volgende configuratiepoll. Zie
+[Dahua native ANPR](dahua-native-anpr.md) voor de native interface, tests en lifecycle.
 
 ## 9. RTSP-test en snapshot
 

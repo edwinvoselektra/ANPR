@@ -1,3 +1,4 @@
+import { historicalCamera } from "../lib/historical-camera.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { displayLicensePlate, normalizeLicensePlate, PERMISSIONS } from "@anpr/shared";
@@ -133,9 +134,9 @@ export async function plateRoutes(app: FastifyInstance) {
       prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, orderBy: [{ timestamp: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit, select: {
         id: true, timestamp: true, displayLicensePlate: true, vehicleColor: true, vehicleType: true,
         vehicleImage1ObjectId: true, plateImageObjectId: true, source: true, direction: true,
-        camera: { select: { id: true, name: true, location: true } }
+        camera: { select: { id: true, name: true, historicalName: true, location: true } }
       } }),
-      prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, distinct: ["cameraId"], select: { camera: { select: { id: true, name: true, location: true } } } }),
+      prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, distinct: ["cameraId"], select: { camera: { select: { id: true, name: true, historicalName: true, location: true } } } }),
       prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, distinct: ["vehicleColor"], select: { vehicleColor: true } }),
       prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, distinct: ["vehicleType"], select: { vehicleType: true } })
     ]);
@@ -144,9 +145,9 @@ export async function plateRoutes(app: FastifyInstance) {
       plate: members.length ? plateResponse(members) : {
         normalizedLicensePlate: normalized, displayLicensePlate: last?.displayLicensePlate ?? displayLicensePlate(normalized), groups: []
       },
-      observations, page: query.page, limit: query.limit, total: count,
+      observations: observations.map(historicalCamera), page: query.page, limit: query.limit, total: count,
       firstSeenAt: first?.timestamp ?? null, lastSeenAt: last?.timestamp ?? null,
-      cameras: cameras.map((item) => item.camera), colors: colors.map((item) => item.vehicleColor), types: types.map((item) => item.vehicleType)
+      cameras: cameras.map((item) => historicalCamera(item).camera), colors: colors.map((item) => item.vehicleColor), types: types.map((item) => item.vehicleType)
     };
   });
 

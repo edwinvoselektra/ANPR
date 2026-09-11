@@ -32,11 +32,12 @@ export async function runCameraLoop(options: {
   const sleep = options.wait ?? wait;
   let attempt = 0;
   while (!options.signal.aborted) {
+    const startedAt = Date.now();
     try {
       await options.repository.markConnecting(options.camera.id);
       await options.provider.connect(options.camera, {
         onConnected: async () => {
-          attempt = 0;
+          // Reset only after a stable connection, not immediately on HTTP 200.
           await options.repository.markConnected(options.camera.id, new Date());
           options.logger.info("[dahua-anpr] connected:", options.camera.name);
         },
@@ -51,6 +52,7 @@ export async function runCameraLoop(options: {
       await options.repository.markDisconnected(options.camera.id, failure.code, failure.message).catch(() => undefined);
     }
     if (options.signal.aborted) break;
+    if (Date.now() - startedAt > 60_000) attempt = 0;
     const delay = reconnectDelay(attempt++, options.minRetryMs, options.maxRetryMs, options.random);
     options.logger.warn(`[dahua-anpr] disconnected; reconnecting in ${Math.round(delay / 1000)}s:`, options.camera.name);
     await sleep(delay, options.signal);
@@ -70,13 +72,13 @@ export class AnprSupervisor {
     const cameras = await this.options.repository.listEnabled();
     const ids = new Set(cameras.map((camera) => camera.id));
     for (const [id, running] of this.running) if (!ids.has(id)) {
-      running.controller.abort(); this.running.delete(id); await this.options.repository.markDisabled(id);
+      running.controller.abort(); await running.promise; this.running.delete(id); await this.options.repository.markDisabled(id);
     }
     for (const camera of cameras) {
-      const fingerprint = JSON.stringify([camera.rtspHost, camera.rtspUsernameEncrypted, camera.rtspPasswordEncrypted, camera.anprProvider, camera.anprHttpProtocol, camera.anprHttpPort, camera.anprChannel, camera.updatedAt]);
+      const fingerprint = JSON.stringify([camera.rtspHost, camera.rtspUsernameEncrypted, camera.rtspPasswordEncrypted, camera.anprProvider, camera.anprHttpProtocol, camera.anprHttpPort, camera.anprChannel, camera.name, camera.location, camera.direction]);
       const current = this.running.get(camera.id);
       if (current?.fingerprint === fingerprint) continue;
-      if (current) current.controller.abort();
+      if (current) { current.controller.abort(); await current.promise; }
       const provider = this.options.providers.get(camera.anprProvider);
       if (!provider) continue;
       const controller = new AbortController();

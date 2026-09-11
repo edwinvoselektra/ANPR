@@ -9,7 +9,8 @@ COPY packages/database/package.json packages/database/package.json
 COPY packages/shared/package.json packages/shared/package.json
 RUN npm ci
 COPY apps/web apps/web
-COPY packages/shared packages/shared
+COPY packages packages
+RUN npm run db:generate
 
 FROM base AS development
 RUN npm run build -w @anpr/shared

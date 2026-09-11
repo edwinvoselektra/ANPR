@@ -11,6 +11,8 @@ describe("authenticatie en permissions", () => {
     expect(await bcrypt.compare("verkeerd", hash)).toBe(false);
   });
 
+  it("laat een ADMIN camera verwijderen ook bij ontbrekende expliciete permission-link", () => { expect(isAuthorized([], PERMISSIONS.CAMERAS_MANAGE, ["ADMIN"])).toBe(true); expect(isAuthorized([], PERMISSIONS.CAMERAS_MANAGE, ["VIEWER"])).toBe(false); });
+
   it("weigert een Viewer een beheerdersactie", () => {
     const viewer = [PERMISSIONS.CAMERAS_VIEW, PERMISSIONS.PASSAGES_VIEW];
     expect(isAuthorized(viewer, PERMISSIONS.USERS_MANAGE)).toBe(false);

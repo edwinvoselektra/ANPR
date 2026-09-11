@@ -1,4 +1,5 @@
 "use client";
+import { NativeAnprTest } from "@/components/NativeAnprTest";
 
 import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -407,10 +408,11 @@ export default function CameraWizard() {
           <>
             <h2>Test ANPR</h2><p className="subtitle">Configureer de eventinname. De echte eventverbinding start pas nadat de camera is opgeslagen.</p>
             <div className="form-grid">
-              <div className="field"><label>ANPR-provider</label><select value={form.anprProvider} onChange={(event) => set("anprProvider", event.target.value)}><option value="NONE">Uitgeschakeld</option><option value="DAHUA_CGI">Dahua CGI TrafficJunction</option></select></div>
+              <div className="field"><label>ANPR-provider</label><select value={form.anprProvider} onChange={(event) => set("anprProvider", event.target.value)}><option value="NONE">Uitgeschakeld</option><option value="DAHUA_CGI">Dahua Native ANPR (ITSAPI)</option></select></div>
               <div className="field"><label>HTTP-protocol</label><select value={form.anprHttpProtocol} onChange={(event) => set("anprHttpProtocol", event.target.value)}><option value="http">HTTP</option><option value="https">HTTPS</option></select></div>
               <div className="field"><label>HTTP-poort</label><input type="number" min="1" max="65535" value={form.anprHttpPort} onChange={(event) => set("anprHttpPort", event.target.value)} /></div>
               <div className="field"><label>Dahua-kanaal</label><input type="number" min="1" max="64" value={form.anprChannel} onChange={(event) => set("anprChannel", event.target.value)} /></div>
+              {form.anprProvider === "DAHUA_CGI" && <NativeAnprTest connection={{ ...connection, anprHttpProtocol: form.anprHttpProtocol, anprHttpPort: Number(form.anprHttpPort), anprChannel: Number(form.anprChannel) }} />}
             </div>
             {connectionStatuses}
             <div className="alert info">“Onbekend” is hier bewust: vóór opslaan draait nog geen langdurige eventworker. Na opslaan wordt de status Verbonden, Onbekend of Mislukt zichtbaar in de camerastatus. Er wordt geen succes gesimuleerd.</div>

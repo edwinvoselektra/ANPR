@@ -24,15 +24,15 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
   void prisma.userSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
 }
 
-export function isAuthorized(userPermissions: readonly string[] | undefined, permission: string): boolean {
-  return Boolean(userPermissions?.includes(permission));
+export function isAuthorized(userPermissions: readonly string[] | undefined, permission: string, roles: readonly string[] = []): boolean {
+  return roles.some(role => role === "ADMIN" || role === "Administrator") || Boolean(userPermissions?.includes(permission));
 }
 
 export function requirePermission(permission: string) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     await authenticate(request, reply);
     if (reply.sent) return;
-    if (!isAuthorized(request.authUser?.permissions, permission)) {
+    if (!isAuthorized(request.authUser?.permissions, permission, request.authUser?.roles)) {
       return reply.code(403).send({ error: "FORBIDDEN", message: "Je hebt geen toestemming voor deze actie." });
     }
   };

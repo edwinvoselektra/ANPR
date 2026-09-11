@@ -1,14 +1,16 @@
+import { Prisma } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { z } from "zod";
-import { PERMISSIONS } from "@anpr/shared";
+import { normalizeCameraHost, PERMISSIONS } from "@anpr/shared";
 import { config } from "../config.js";
 import { audit } from "../lib/audit.js";
 import { requirePermission } from "../lib/auth.js";
 import { buildRtspUrl, encryptedConnection, parseConnection, publicCamera } from "../lib/camera.js";
-import { encryptSecret } from "../lib/crypto.js";
+import { testDahua } from "../lib/dahua-test.js";
+import { decryptSecret, encryptSecret } from "../lib/crypto.js";
 import { encryptedDahuaConnection } from "../lib/device-connections.js";
 import { prisma } from "../lib/prisma.js";
 import { testRtsp } from "../lib/rtsp.js";
@@ -41,7 +43,6 @@ const cameraBody = rtspFields.merge(z.object({
 })).superRefine((value,ctx)=>{
   if(value.primaryConnection==="DAHUA_TCP_SDK"&&!value.dahuaTcp)ctx.addIssue({code:"custom",message:"Vul de Dahua TCP-gegevens in.",path:["dahuaTcp"]});
   if(value.primaryConnection==="RTSP"&&!value.rtspEnabled)ctx.addIssue({code:"custom",message:"RTSP moet actief zijn wanneer RTSP de primaire verbinding is.",path:["rtspEnabled"]});
-  if(value.anprProvider!=="NONE"&&!value.rtspEnabled)ctx.addIssue({code:"custom",message:"De bestaande Dahua CGI-eventprovider vereist ook een geconfigureerde apparaathost via RTSP.",path:["anprProvider"]});
   if(value.rtspEnabled&&value.connectionMode==="URL"&&!value.rtspUrl)ctx.addIssue({code:"custom",message:"RTSP URL is verplicht.",path:["rtspUrl"]});
   if(value.rtspEnabled&&value.connectionMode==="FIELDS"&&!value.rtspHost&&!value.dahuaTcp?.host)ctx.addIssue({code:"custom",message:"IP-adres of hostnaam is verplicht voor RTSP.",path:["rtspHost"]});
 });
@@ -89,13 +90,13 @@ function temporaryRtspUrl(body: z.infer<typeof connection>) {
 
 export async function cameraRoutes(app: FastifyInstance) {
   app.get("/cameras", { preHandler: requirePermission(PERMISSIONS.CAMERAS_VIEW) }, async (_request, reply) => {
-    const cameras = await prisma.camera.findMany({ include: { zones: true, deviceConnections: true, _count: { select: { passages: { where: { timestamp: { gte: new Date(Date.now() - 86_400_000) } } } } } }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }] });
+    const cameras = await prisma.camera.findMany({ where: { archivedAt: null }, include: { zones: true, deviceConnections: true, _count: { select: { passages: { where: { timestamp: { gte: new Date(Date.now() - 86_400_000) } } } } } }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }] });
     return reply.header("Cache-Control", "private, no-store").send({ cameras: cameras.map(publicCamera) });
   });
 
   app.get("/cameras/:id", { preHandler: requirePermission(PERMISSIONS.CAMERAS_VIEW) }, async (request) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    return { camera: publicCamera(await prisma.camera.findUniqueOrThrow({ where: { id }, include: { zones: true, deviceConnections: true } })) };
+    return { camera: publicCamera(await prisma.camera.findUniqueOrThrow({ where: { id, archivedAt: null }, include: { zones: true, deviceConnections: true } })) };
   });
 
   app.get("/cameras/name-availability", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request) => {
@@ -107,9 +108,9 @@ export async function cameraRoutes(app: FastifyInstance) {
   app.post("/cameras", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request, reply) => {
     const body = cameraBody.parse(request.body);
     await validateLocationLink(body.locationId, body.recorderId);
-    const connectionData = body.rtspEnabled ? encryptedConnection({...body,rtspHost:body.rtspHost??body.dahuaTcp?.host,username:body.username??body.dahuaTcp?.username,password:body.password??body.dahuaTcp?.password}) : { connectionMode:"FIELDS" as const,rtspProtocol:"rtsp",rtspHost:null,rtspPort:554,rtspPath:null,rtspUsernameEncrypted:null,rtspPasswordEncrypted:null };
+    const connectionData = body.rtspEnabled || body.anprProvider !== "NONE" ? encryptedConnection({...body,rtspHost:body.rtspHost??body.dahuaTcp?.host,username:body.username??body.dahuaTcp?.username,password:body.password??body.dahuaTcp?.password}) : { connectionMode:"FIELDS" as const,rtspProtocol:"rtsp",rtspHost:null,rtspPort:554,rtspPath:null,rtspUsernameEncrypted:null,rtspPasswordEncrypted:null };
     const camera = await prisma.camera.create({ data: {
-      name: body.name, location: body.location, description: body.description, direction: body.direction,
+      rtspEnabled: body.rtspEnabled, name: body.name, location: body.location, description: body.description, direction: body.direction,
       latitude: body.latitude, longitude: body.longitude, active: body.active,
       status: body.active ? "OFFLINE" : "DISABLED", displayOrder: body.displayOrder,
       offlineTimeoutSeconds: body.offlineTimeoutSeconds, ...connectionData,
@@ -127,10 +128,10 @@ export async function cameraRoutes(app: FastifyInstance) {
   app.patch("/cameras/:id", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const body = updateBody.parse(request.body);
-    const current = await prisma.camera.findUniqueOrThrow({ where: { id }, include: { zones: true, deviceConnections: true } });
+    const current = await prisma.camera.findUniqueOrThrow({ where: { id, archivedAt: null }, include: { zones: true, deviceConnections: true } });
     await validateLocationLink(body.locationId === undefined ? current.locationId : body.locationId, body.recorderId === undefined ? current.recorderId : body.recorderId);
     let connectionData = {};
-    if (body.rtspEnabled === false) {
+    if (body.rtspEnabled === false && (body.anprProvider ?? current.anprProvider) === "NONE") {
       connectionData = { rtspHost:null,rtspPath:null,rtspUsernameEncrypted:null,rtspPasswordEncrypted:null };
     } else if (body.connectionMode || body.rtspUrl || body.rtspHost) {
       connectionData = encryptedConnection({
@@ -158,7 +159,7 @@ export async function cameraRoutes(app: FastifyInstance) {
         await tx.deviceConnection.upsert({where:{cameraId_type:{cameraId:id,type:"DAHUA_TCP_SDK"}},create:{cameraId:id,...data},update:data});
       }
       return tx.camera.update({ where: { id }, data: {
-        name: body.name, location: body.location, description: body.description, direction: body.direction,
+        rtspEnabled: body.rtspEnabled, name: body.name, location: body.location, description: body.description, direction: body.direction,
         latitude: body.latitude, longitude: body.longitude, active: body.active,
         status: body.active === false ? "DISABLED" : body.active === true && current.status === "DISABLED" ? "OFFLINE" : undefined,
         displayOrder: body.displayOrder, offlineTimeoutSeconds: body.offlineTimeoutSeconds,
@@ -168,7 +169,7 @@ export async function cameraRoutes(app: FastifyInstance) {
         capabilities: body.anprProvider ? capabilities(body.anprProvider) : undefined,
         locationId: body.locationId, recorderId: body.locationId === null ? null : body.recorderId,
         ...connectionData,
-        ...(body.rtspEnabled===false?{rtspHost:null,rtspPath:null,rtspUsernameEncrypted:null,rtspPasswordEncrypted:null}:{}),
+        ...(body.rtspEnabled===false && (body.anprProvider ?? current.anprProvider) === "NONE" ?{rtspHost:null,rtspPath:null,rtspUsernameEncrypted:null,rtspPasswordEncrypted:null}:{}),
       }, include: { zones: true, deviceConnections: true } });
     });
     await audit(request, "CAMERA_UPDATED", { objectType: "Camera", objectId: id, oldValue: publicCamera(current), newValue: publicCamera(camera) });
@@ -179,13 +180,31 @@ export async function cameraRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const camera = await prisma.camera.findUnique({ where: { id }, include: { _count: { select: { passages: true, hits: true } } } });
     if (!camera) return reply.code(204).send();
-    if (camera._count.passages > 0 || camera._count.hits > 0) {
-      return reply.code(409).send({ error: "CAMERA_HAS_HISTORY", message: "Deze camera heeft historische passages of hits en kan voor behoud van historie alleen worden uitgeschakeld." });
+    if (camera.archivedAt) return reply.code(204).send();
+    {
+      await prisma.$transaction(async (tx) => {
+        await tx.camera.update({ where: { id }, data: {
+          archivedAt: new Date(), historicalName: camera.name, name: `archived:${id}`,
+          active: false, rtspEnabled: false, status: "DISABLED", anprProvider: "NONE", anprConnectionStatus: "DISABLED",
+          rtspHost: null, rtspPath: null, rtspUsernameEncrypted: null, rtspPasswordEncrypted: null,
+          lastSnapshotObjectId: null, anprSettings: Prisma.DbNull, vehicleDetectionSettings: Prisma.DbNull,
+          capabilities: Prisma.DbNull, locationId: null, recorderId: null
+        } });
+        await tx.cameraZone.deleteMany({ where: { cameraId: id } });
+        await tx.deviceConnection.deleteMany({ where: { cameraId: id } });
+      });
+      await audit(request, "CAMERA_ARCHIVED", { objectType: "Camera", objectId: id, metadata: { historicalDataPreserved: true } });
+      return reply.code(204).send();
     }
-    const deleted = await prisma.camera.deleteMany({ where: { id } });
-    if (deleted.count === 0) return reply.code(204).send();
-    await audit(request, "CAMERA_DELETED", { objectType: "Camera", objectId: id, oldValue: publicCamera(camera) });
-    return reply.code(204).send();
+
+  });
+
+  app.post("/cameras/test-anpr", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE), config: { rateLimit: { max: 6, timeWindow: "1 minute" } } }, async (request) => {
+    const body = rtspFields.extend({ cameraId: z.string().uuid().optional(), anprHttpProtocol: z.enum(["http", "https"]).default("http"), anprHttpPort: z.coerce.number().int().min(1).max(65535).default(80), anprChannel: z.coerce.number().int().min(1).max(64).default(1) }).parse(request.body);
+    const current = body.cameraId ? await prisma.camera.findUniqueOrThrow({ where: { id: body.cameraId, archivedAt: null } }) : undefined;
+    const parsed = parseConnection({ ...body, rtspHost: body.rtspHost ?? current?.rtspHost ?? undefined });
+    return testDahua({ host: normalizeCameraHost(parsed.rtspHost), protocol: body.anprHttpProtocol, port: body.anprHttpPort, channel: body.anprChannel,
+      username: parsed.username || decryptSecret(current?.rtspUsernameEncrypted), password: parsed.password || decryptSecret(current?.rtspPasswordEncrypted) });
   });
 
   app.post("/cameras/test-connection", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request) => {
@@ -200,7 +219,7 @@ export async function cameraRoutes(app: FastifyInstance) {
 
   app.post("/cameras/:id/test", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    const camera = await prisma.camera.findUniqueOrThrow({ where: { id } });
+    const camera = await prisma.camera.findUniqueOrThrow({ where: { id, archivedAt: null } });
     const result = await testRtsp(buildRtspUrl(camera));
     await prisma.camera.update({ where: { id }, data: result.success ? {
       status: camera.active ? "ONLINE" : "DISABLED", lastConnectionAt: new Date(), lastConnectionSuccessAt: new Date(),

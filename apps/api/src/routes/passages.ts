@@ -1,3 +1,4 @@
+import { historicalCamera } from "../lib/historical-camera.js";
 import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -12,8 +13,8 @@ const publicSelect = {
   id: true, originalLicensePlate: true, normalizedLicensePlate: true, displayLicensePlate: true,
   plateConfidence: true, plateCountry: true, timestamp: true, location: true, direction: true,
   vehicleColor: true, vehicleType: true, vehicleConfidence: true, vehicleBrand: true, lane: true,
-  vehicleImage1ObjectId: true, plateImageObjectId: true, isHit: true, status: true, source: true,
-  camera: { select: { id: true, name: true, location: true } }
+  vehicleImage1ObjectId: true, vehicleImage2ObjectId: true, plateImageObjectId: true, isHit: true, status: true, source: true,
+  camera: { select: { id: true, name: true, historicalName: true, location: true } }
 } as const;
 
 export async function passageRoutes(app: FastifyInstance) {
@@ -23,21 +24,21 @@ export async function passageRoutes(app: FastifyInstance) {
       where: { status: { not: "DELETED" }, timestamp: query.before ? { lt: new Date(query.before) } : undefined },
       select: publicSelect, orderBy: [{ timestamp: "desc" }, { id: "desc" }], take: query.limit
     });
-    return reply.header("Cache-Control", "private, no-store").send({ passages });
+    return reply.header("Cache-Control", "private, no-store").send({ passages: passages.map(historicalCamera) });
   });
 
   app.get("/passages/:id", { preHandler: requirePermission(PERMISSIONS.PASSAGES_VIEW) }, async (request, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const passage = await prisma.passage.findFirst({ where: { id, status: { not: "DELETED" } }, select: publicSelect });
     if (!passage) return reply.code(404).send({ error: "PASSAGE_NOT_FOUND", message: "Deze passage bestaat niet (meer)." });
-    return reply.header("Cache-Control", "private, no-store").send({ passage });
+    return reply.header("Cache-Control", "private, no-store").send({ passage: historicalCamera(passage) });
   });
 
   app.get("/passages/:id/image/:kind", { preHandler: requirePermission(PERMISSIONS.PASSAGES_VIEW) }, async (request, reply) => {
-    const { id, kind } = z.object({ id: z.string().uuid(), kind: z.enum(["overview", "plate"]) }).parse(request.params);
-    const passage = await prisma.passage.findFirst({ where: { id, status: { not: "DELETED" } }, select: { vehicleImage1ObjectId: true, plateImageObjectId: true } });
+    const { id, kind } = z.object({ id: z.string().uuid(), kind: z.enum(["overview", "plate", "extra"]) }).parse(request.params);
+    const passage = await prisma.passage.findFirst({ where: { id, status: { not: "DELETED" } }, select: { vehicleImage1ObjectId: true, vehicleImage2ObjectId: true, plateImageObjectId: true } });
     if (!passage) return reply.code(404).send({ error: "PASSAGE_NOT_FOUND", message: "Deze passage bestaat niet (meer)." });
-    const objectId = kind === "overview" ? passage.vehicleImage1ObjectId : passage.plateImageObjectId;
+    const objectId = kind === "overview" ? passage.vehicleImage1ObjectId : kind === "extra" ? passage.vehicleImage2ObjectId : passage.plateImageObjectId;
     if (!objectId) return reply.code(404).send({ error: "IMAGE_NOT_FOUND", message: "Voor deze passage is deze foto niet beschikbaar." });
     const root = resolve(config.STORAGE_PATH);
     const file = resolve(root, objectId);

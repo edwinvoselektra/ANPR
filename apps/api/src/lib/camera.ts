@@ -1,3 +1,4 @@
+import { normalizeCameraHost } from "@anpr/shared";
 import type { Camera } from "@prisma/client";
 import { decryptSecret, encryptSecret } from "./crypto.js";
 
@@ -31,7 +32,7 @@ export function parseConnection(input: CameraConnectionInput) {
   return {
     connectionMode: "FIELDS" as const,
     rtspProtocol: "rtsp",
-    rtspHost: input.rtspHost.trim(),
+    rtspHost: (() => { try { return normalizeCameraHost(input.rtspHost); } catch (error) { throw Object.assign(error as Error, { statusCode: 400 }); } })(),
     rtspPort: input.rtspPort ?? 554,
     rtspPath: input.rtspPath?.trim() || "/",
     username: input.username?.trim(),
@@ -64,7 +65,7 @@ export function buildRtspUrl(camera: Pick<Camera, "rtspProtocol" | "rtspHost" | 
 
 export function publicCamera(camera: any) {
   const { rtspUsernameEncrypted, rtspPasswordEncrypted, ...safe } = camera;
-  return { ...safe, deviceConnections: Array.isArray(safe.deviceConnections) ? safe.deviceConnections.map((connection:any)=>{
+  return { ...safe, name: safe.historicalName ?? safe.name, deviceConnections: Array.isArray(safe.deviceConnections) ? safe.deviceConnections.map((connection:any)=>{
     const {usernameEncrypted,passwordEncrypted,...publicConnection}=connection;
     return {...publicConnection,hasUsername:Boolean(usernameEncrypted),hasPassword:Boolean(passwordEncrypted)};
   }) : undefined, hasUsername: Boolean(rtspUsernameEncrypted), hasPassword: Boolean(rtspPasswordEncrypted) };

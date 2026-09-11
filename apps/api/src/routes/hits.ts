@@ -1,3 +1,4 @@
+import { historicalCamera } from "../lib/historical-camera.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { PERMISSIONS } from "@anpr/shared";
@@ -6,7 +7,7 @@ import { prisma } from "../lib/prisma.js";
 
 const groupSelect = { id: true, name: true, color: true, icon: true } as const;
 const hitInclude = {
-  camera: { select: { id: true, name: true, location: true } },
+  camera: { select: { id: true, name: true, historicalName: true, location: true } },
   group: { select: groupSelect },
   groups: { include: { group: { select: groupSelect } }, orderBy: { group: { name: "asc" as const } } },
   passage: { select: {
@@ -19,7 +20,7 @@ const hitInclude = {
 
 function publicHit(hit: any) {
   const groups = hit.groups.length ? hit.groups.map((link: any) => ({ ...link.group, reason: link.reason })) : [{ ...hit.group, reason: hit.reason }];
-  return { ...hit, groups };
+  return { ...historicalCamera(hit), groups };
 }
 
 export async function hitRoutes(app: FastifyInstance) {

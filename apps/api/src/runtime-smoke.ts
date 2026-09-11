@@ -134,7 +134,7 @@ try {
   if (rtspTest.statusCode !== 200 || rtspTest.json().success !== false || !rtspTest.json().code) throw new Error(`RTSP-foutclassificatie mislukt: ${rtspTest.body}`);
   const deletedCamera = await app.inject({ method: "DELETE", url: `/cameras/${cameraId}`, headers: { cookie: adminCookie, origin: "http://localhost:3000" } });
   if (deletedCamera.statusCode !== 204) throw new Error(`Camera verwijderen mislukt: ${deletedCamera.body}`);
-  createdCameraIds.splice(createdCameraIds.indexOf(cameraId), 1);
+  // The archived camera reference is cleaned up below with the fixture records.
   await expectStatus("POST", "/cameras", viewerCookie, 403);
   await expectStatus("GET", "/cameras", viewerCookie, 200);
   await expectStatus("GET", "/passages", viewerCookie, 200);

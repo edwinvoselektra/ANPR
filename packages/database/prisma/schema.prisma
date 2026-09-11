@@ -209,6 +209,9 @@ model UserSession {
 }
 
 model Camera {
+  rtspEnabled              Boolean              @default(true)
+  archivedAt               DateTime?
+  historicalName           String?
   id                       String               @id @default(uuid()) @db.Uuid
   name                     String               @unique
   location                 String

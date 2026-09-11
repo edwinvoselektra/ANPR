@@ -1,3 +1,5 @@
+import { dahuaEventPath } from "@anpr/shared/dahua";
+import { boundaryFromContentType } from "../multipart.js";
 import { decryptCredential } from "../credentials.js";
 import { openDigestStream } from "../digest.js";
 import { consumeMultipart, type MultipartPart } from "../multipart.js";
@@ -24,8 +26,9 @@ export class DahuaAnprProvider implements AnprEventProvider {
     if (!protocol) throw new Error("INVALID_ANPR_PROTOCOL");
     const username = decryptCredential(camera.rtspUsernameEncrypted, this.options.keyHex);
     const password = decryptCredential(camera.rtspPasswordEncrypted, this.options.keyHex);
-    const path = `/cgi-bin/snapManager.cgi?action=attachFileProc&channel=${camera.anprChannel}&heartbeat=5&Flags[0]=Event&Events=[TrafficJunction]`;
+    const path = dahuaEventPath(camera.anprChannel);
     const response = await (this.options.openStream ?? openDigestStream)({ protocol, host: validateHost(camera.rtspHost), port: camera.anprHttpPort, path, username, password, signal, timeoutMs: this.options.timeoutMs });
+    try { boundaryFromContentType(response.headers["content-type"]); } catch (error) { response.destroy(); throw error; }
     await handlers.onConnected();
     let pending: DahuaRawEvent | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -52,13 +55,14 @@ export class DahuaAnprProvider implements AnprEventProvider {
           return;
         }
         flush();
+        await chain;
         pending = { fields };
         schedule();
       } else if (contentType === "image/jpeg" && pending) {
         const image = { contentType: "image/jpeg" as const, data: part.body };
         if (imageKind(part.headers) === "plate") pending.plateImage = image;
         else if (!pending.overviewImage) pending.overviewImage = image;
-        else if (!pending.plateImage) pending.plateImage = image;
+        else if (!pending.extraImage) pending.extraImage = image;
         schedule();
       }
     };

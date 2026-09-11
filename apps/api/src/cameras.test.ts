@@ -5,11 +5,14 @@ import { Prisma } from "@prisma/client";
 const prismaMock = vi.hoisted(() => ({
   camera: {
     create: vi.fn(),
+    update: vi.fn(),
     deleteMany: vi.fn(),
     findMany: vi.fn(),
     findUnique: vi.fn(),
     findUniqueOrThrow: vi.fn()
   },
+  cameraZone: { deleteMany: vi.fn() },
+  deviceConnection: { deleteMany: vi.fn() },
   auditLog: { create: vi.fn() },
   vpnLocation: { findUnique: vi.fn() },
   recorder: { findFirst: vi.fn() },
@@ -71,6 +74,8 @@ let app: FastifyInstance | undefined;
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.auditLog.create.mockResolvedValue({});
+  prismaMock.camera.update.mockResolvedValue({});
+  prismaMock.$transaction.mockImplementation(async (fn) => fn(prismaMock));
 });
 afterEach(async () => { await app?.close(); app = undefined; });
 
@@ -179,8 +184,8 @@ describe("camera verwijderen", () => {
     expect(firstDelete.statusCode).toBe(204);
     expect(secondDelete.statusCode).toBe(204);
     expect(recreate.statusCode).toBe(201);
-    expect(prismaMock.camera.deleteMany).toHaveBeenCalledOnce();
-    expect(prismaMock.camera.deleteMany).toHaveBeenCalledWith({ where: { id: cameraId } });
+    expect(prismaMock.camera.update).toHaveBeenCalledOnce();
+    expect(prismaMock.camera.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: cameraId }, data: expect.objectContaining({ active: false, rtspPasswordEncrypted: null, historicalName: "Herbruikbare naam" }) }));
   });
 
   it("maakt de verwijderde camera en zijn credentials niet meer benaderbaar", async () => {
@@ -208,11 +213,10 @@ describe("camera verwijderen", () => {
 
     const response = await app.inject({ method: "DELETE", url: `/cameras/${cameraId}` });
 
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toEqual({
-      error: "CAMERA_HAS_HISTORY",
-      message: "Deze camera heeft historische passages of hits en kan voor behoud van historie alleen worden uitgeschakeld."
-    });
+    expect(response.statusCode).toBe(204);
+    expect(prismaMock.camera.update).toHaveBeenCalledWith(expect.objectContaining({data: expect.objectContaining({active: false, historicalName: "Camera met historie", archivedAt: expect.any(Date)})}));
+    expect(prismaMock.cameraZone.deleteMany).toHaveBeenCalledWith({where: {cameraId}});
+    expect(prismaMock.deviceConnection.deleteMany).toHaveBeenCalledWith({where: {cameraId}});
     expect(prismaMock.camera.deleteMany).not.toHaveBeenCalled();
   });
 });

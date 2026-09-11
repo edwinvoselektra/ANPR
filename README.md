@@ -436,3 +436,7 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 
 Fase 2.5 Live camera's, server-OCR en productiedeployment zijn niet gestart. Eerst
 volgt de handmatige ER605- en recorder-test uit de handleiding.
+
+### Dahua Native ANPR (ITSAPI)
+
+Native Dahua-events gebruiken de kentekenherkenning in de camera; RTSP blijft voor video en snapshots. De wizard heeft een geauthenticeerde **ITSAPI / ANPR testen**-knop. Camera verwijderen archiveert de referentie en behoudt historische passages/hits. Zie [configuratie, lokale cameraverificatie en fysieke testprocedure](docs/dahua-native-anpr.md).

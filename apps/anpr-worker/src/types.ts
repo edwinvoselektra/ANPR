@@ -30,6 +30,7 @@ export type NormalizedAnprEvent = {
   lane?: number;
   overviewImage?: EventImage;
   plateImage?: EventImage;
+  extraImage?: EventImage;
   source: "DAHUA_CAMERA";
   sourceEventId?: string;
   rawMetadata?: Record<string, string | number | boolean>;

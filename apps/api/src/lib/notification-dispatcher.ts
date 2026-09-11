@@ -6,10 +6,10 @@ import { pushConfiguration, pushFailure, webPushSender, type PushSender } from "
 type Logger = { info(value: object, message: string): void; error(value: object, message: string): void };
 const quietLogger: Logger = { info: () => undefined, error: () => undefined };
 
-function payloadFor(hit: { id: string; normalizedLicensePlate: string; reason: string | null; cameraId: string; camera: { name: string } }) {
+function payloadFor(hit: { id: string; normalizedLicensePlate: string; reason: string | null; cameraId: string; camera: { name: string; historicalName?: string | null } }) {
   return JSON.stringify({
     title: "ANPR Hit",
-    body: `${hit.normalizedLicensePlate} · ${hit.camera.name}${hit.reason ? ` · ${hit.reason}` : ""}`,
+    body: `${hit.normalizedLicensePlate} · ${hit.camera.historicalName ?? hit.camera.name}${hit.reason ? ` · ${hit.reason}` : ""}`,
     data: { hitId: hit.id, url: `/hits/${hit.id}`, cameraId: hit.cameraId }
   });
 }
@@ -25,7 +25,7 @@ async function recordSkipped(db: PrismaClient, hitId: string, recipientId: strin
 export async function dispatchHit(db: PrismaClient, hitId: string, sender: PushSender, logger: Logger = quietLogger) {
   const hit = await db.hit.findUnique({
     where: { id: hitId },
-    include: { camera: { select: { name: true } }, groups: { select: { groupId: true } } }
+    include: { camera: { select: { name: true, historicalName: true } }, groups: { select: { groupId: true } } }
   });
   if (!hit) return;
   const groupIds = new Set(hit.groups.map(({ groupId }) => groupId));

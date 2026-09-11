@@ -2,7 +2,7 @@ import type { CameraDirection, VehicleColor, VehicleType } from "@prisma/client"
 import { normalizeLicensePlate } from "@anpr/shared";
 import type { EventImage, ManagedAnprCamera, NormalizedAnprEvent } from "../types.js";
 
-export type DahuaRawEvent = { fields: Record<string, string>; overviewImage?: EventImage; plateImage?: EventImage };
+export type DahuaRawEvent = { fields: Record<string, string>; overviewImage?: EventImage; plateImage?: EventImage; extraImage?: EventImage };
 
 export function parseDahuaFields(body: Buffer): Record<string, string> {
   if (body.length > 256_000) throw new Error("EVENT_METADATA_TOO_LARGE");
@@ -35,6 +35,8 @@ function confidence(value?: string): number | undefined {
 
 function occurredAt(value: string | undefined, fallback: Date) {
   if (!value) return fallback;
+  if (/^\d{10}(?:\.\d+)?$/.test(value)) return new Date(Number(value) * 1000);
+  if (/^\d{13}$/.test(value)) return new Date(Number(value));
   const direct = new Date(value.replace(" ", "T"));
   return Number.isNaN(direct.getTime()) ? fallback : direct;
 }
@@ -56,7 +58,7 @@ function direction(value?: string): CameraDirection | undefined {
 }
 
 function safeMetadata(fields: Record<string, string>) {
-  const allowed = ["Code", "Action", "Index", "Channel", "GroupID", "CountInGroup", "IndexInGroup", "Lane", "PTS"];
+  const allowed = ["Code", "Action", "Index", "Channel", "GroupID", "CountInGroup", "IndexInGroup", "Lane", "PTS", "VehicleModel", "Speed", "UTC", "RealUTC", "SnapTime", "Time"];
   const result: Record<string, string | number | boolean> = {};
   for (const name of allowed) {
     const value = suffix(fields, [name]);
@@ -94,7 +96,7 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
     vehicleType: type ? types[type.toLowerCase()] ?? "UNKNOWN" : undefined,
     vehicleBrand: suffix(raw.fields, ["Vehicle.Brand", "TrafficCar.VehicleSign", "VehicleSign", "Brand"]),
     direction: direction(suffix(raw.fields, ["Direction"])), lane,
-    overviewImage: raw.overviewImage, plateImage: raw.plateImage,
+    overviewImage: raw.overviewImage, plateImage: raw.plateImage, extraImage: raw.extraImage,
     source: "DAHUA_CAMERA", sourceEventId,
     rawMetadata: safeMetadata(raw.fields)
   };

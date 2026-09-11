@@ -12,8 +12,8 @@ COPY apps/anpr-worker apps/anpr-worker
 COPY packages packages
 
 FROM base AS development
-RUN npm run build -w @anpr/shared
 RUN npm run db:generate
+RUN npm run build -w @anpr/shared
 EXPOSE 4200
 
 FROM development AS build
