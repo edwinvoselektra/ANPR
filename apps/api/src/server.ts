@@ -23,9 +23,10 @@ import { notificationRoutes } from "./routes/notifications.js";
 import { startNotificationDispatcher } from "./lib/notification-dispatcher.js";
 import { locationRoutes } from "./routes/locations.js";
 import { startLocationHealthChecks } from "./lib/location-health.js";
+import { deviceConnectionRoutes } from "./routes/device-connections.js";
 
 export function buildServer() {
-  const app = Fastify({ logger: { redact: ["req.headers.cookie", "req.headers.authorization", "req.body.password", "req.body.privateKey", "req.body.rtspUrl", "req.body.username", "req.body.endpoint", "req.body.keys", "req.body.p256dh", "req.body.auth"] }, bodyLimit: 1_048_576, trustProxy: true });
+  const app = Fastify({ logger: { redact: ["req.headers.cookie", "req.headers.authorization", "req.body.password", "req.body.privateKey", "req.body.rtspUrl", "req.body.username", "req.body.dahuaTcp.password", "req.body.dahuaTcp.username", "req.body.endpoint", "req.body.keys", "req.body.p256dh", "req.body.auth"] }, bodyLimit: 1_048_576, trustProxy: true });
   void app.register(cookie);
   void app.register(helmet, { contentSecurityPolicy: false });
   void app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
@@ -83,6 +84,7 @@ export function buildServer() {
   void app.register(searchRoutes);
   void app.register(notificationRoutes);
   void app.register(locationRoutes);
+  void app.register(deviceConnectionRoutes);
   return app;
 }
 

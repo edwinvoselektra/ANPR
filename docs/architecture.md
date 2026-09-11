@@ -134,8 +134,11 @@ een samengestelde URL met credentials. Bij bewerken betekent een leeg wachtwoord
 bestaand geheim behouden.
 
 CameraZones bewaren genormaliseerde JSON-coördinaten (0–1) voor rechthoek of polygon.
-De wizard kan de zone over een echte snapshot tekenen. Camerastatus wordt afgeleid uit
-actiefstatus, laatste testresultaat en offline-timeout.
+De wizard kan de zone alleen over een echte snapshot tekenen. Een ontbrekende zone
+blokkeert de Device/API-, RTSP- of snapshottest niet en is in deze fase optioneel bij
+opslaan. Daardoor kan een gebruiker eerst de videoverbinding herstellen en pas daarna
+een betrouwbaar herkenningsgebied tekenen. Camerastatus wordt afgeleid uit actiefstatus,
+laatste testresultaat en offline-timeout.
 
 Camera-delete is idempotent: een bestaande camera zonder historie en zijn versleutelde
 credentials worden als één databaserij verwijderd; een reeds ontbrekende UUID geeft
@@ -151,6 +154,22 @@ array (geen shell). `ffprobe` controleert bereikbaarheid en streammetadata met e
 timeout. `ffmpeg` leest daarna maximaal één frame en schrijft dat via de storageprovider
 als snapshot. URL's en subprocess-output worden gesaneerd voordat ze worden gelogd of
 teruggestuurd.
+
+De testrespons houdt vier verschillende signalen uit elkaar: Device/API, RTSP-video,
+snapshot/frame en ANPR-events. Een geslaagde `ffprobe` betekent uitsluitend dat de
+RTSP-videostream is geopend. `POST /cameras/test-connection` voert alleen die videoprobe
+uit; de aparte tijdelijke endpoint `POST /cameras/test-snapshot` haalt op verzoek één
+frame op en rapporteert een mislukte extractie expliciet als
+`Snapshot: Niet beschikbaar`. Een ANPR-eventverbinding wordt in de aanmaakwizard
+niet als geslaagd voorgesteld: vóór opslag en het starten van de eventworker blijft deze
+status `Onbekend`.
+
+Ook de Dahua TCP-test scheidt netwerkbereikbaarheid van apparaatidentiteit en
+authenticatie. Een open poort 37777 levert zonder officiële NetSDK-adapter geen algemene
+successtatus op: apparaat/API blijft `Niet bevestigd` en authenticatie `Niet getest`.
+Model, firmware en kanalen worden alleen getoond wanneer een officiële adapter zowel
+het Dahua-apparaat als de authenticatie daadwerkelijk heeft bevestigd. Het private
+Dahua-protocol wordt niet in eigen code nagebouwd.
 
 Fouten worden op basis van netwerkfout, timeout en gesaneerde FFmpeg-categorie vertaald
 naar: authenticatie mislukt, host/DNS onbereikbaar, poort gesloten, stream/path fout,
@@ -494,3 +513,36 @@ De API-container beheert geen WireGuard-interface en krijgt geen `NET_ADMIN` of
 Recorderbereikbaarheid gebruikt uitsluitend de opgeslagen recorder en RTSP-poort met
 een korte TCP-timeout; er is geen ping- of subnetscan. Iedere locatiecheck is geïsoleerd
 met `Promise.allSettled`, zodat één storing de rest niet blokkeert.
+
+## 24. Dahua TCP / SDK-apparaattransport
+
+Camera's behouden hun bestaande RTSP-configuratie. Een additief `DeviceConnection`-record
+kan daarnaast aan precies één camera of recorder toebehoren. Hierdoor is een hybride
+configuratie mogelijk: Dahua TCP voor apparaatinfo, events en kanalen, en RTSP voor het
+videobeeld. De applicatielaag gebruikt `DeviceConnectionProvider`, met afzonderlijke
+`RtspProvider` en `DahuaTcpProvider` implementaties.
+
+```text
+Dahua NVR
+  +-- DeviceConnection: DAHUA_TCP_SDK / TCP 37777
+  |     apparaatinfo, capabilities en kanalen (alleen indien SDK-bevestigd)
+  +-- Recorder.rtspPort / Camera RTSP-configuratie
+        videostream en snapshot
+```
+
+TCP 37777 is door Dahua gedocumenteerd als de standaard private-protocolpoort. Het
+platform implementeert dat private protocol bewust niet zelf. De huidige provider doet
+DNS-validatie en een begrensde TCP-connectietest. De interface `DahuaSdkAdapter` is het
+integratiepunt voor een later geïnstalleerde officiële native NetSDK. Zolang die adapter
+niet aanwezig is, blijven authenticatie, apparaattype, model, firmware, kanalen en alle
+capabilities `UNKNOWN`; een open TCP-poort wordt niet als geslaagde Dahua-authenticatie
+voorgesteld.
+
+Capabilities gebruiken uitsluitend `SUPPORTED`, `UNSUPPORTED` en `UNKNOWN`. Alleen een
+officiële adapter mag bevestigde apparaatwaarden invullen. Devicecredentials gebruiken
+dezelfde AES-256-GCM-secretlaag als RTSP, worden uit API-responses verwijderd en zijn
+expliciet geredigeerd in requestlogging. De TCP-probe verstuurt geen payload, gebruikt
+een korte timeout en blokkeert localhost, loopback, link-local, multicast en adressen
+waarnaar een hostnaam veilig opnieuw is geresolved. Alleen `cameras.manage` mag testen of
+wijzigen. De video-worker selecteert alleen actieve camera's met een RTSP-host, zodat een
+TCP-only configuratie geen foutieve videoloop start.

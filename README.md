@@ -430,6 +430,7 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 - [Resultaat Fase 3](docs/PHASE3-RESULT.md)
 - [Resultaat Fase 2.4.5](docs/PHASE2.4.5-RESULT.md)
 - [ER605 WireGuard instellen](docs/er605-wireguard-setup.md)
+- [Dahua TCP / SDK koppelen](docs/dahua-tcp-sdk.md)
 
 ## Stop na Fase 2.4.5
 

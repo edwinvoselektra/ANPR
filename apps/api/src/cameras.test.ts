@@ -75,6 +75,15 @@ beforeEach(() => {
 afterEach(async () => { await app?.close(); app = undefined; });
 
 describe("unieke cameranaam", () => {
+  it("slaat hybride Dahua TCP en RTSP op zonder secrets terug te sturen",async()=>{
+    prismaMock.camera.create.mockResolvedValue({...camera("Hybride camera"),deviceConnections:[{id:"dahua",type:"DAHUA_TCP_SDK",host:"192.168.178.210",port:37777,requestedCategory:"CAMERA",usernameEncrypted:"cipher-user",passwordEncrypted:"cipher-password"}]});
+    app=buildServer();
+    const response=await app.inject({method:"POST",url:"/cameras",payload:{...createBody("Hybride camera"),primaryConnection:"DAHUA_TCP_SDK",rtspEnabled:true,dahuaTcp:{host:"192.168.178.210",port:37777,username:"admin",password:"dahua-geheim",category:"CAMERA"}}});
+    expect(response.statusCode).toBe(201);
+    expect(prismaMock.camera.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({rtspHost:"camera.invalid",deviceConnections:{create:expect.objectContaining({type:"DAHUA_TCP_SDK",port:37777})}})}));
+    expect(response.json().camera.deviceConnections[0]).toMatchObject({host:"192.168.178.210",hasUsername:true,hasPassword:true});
+    expect(response.body).not.toContain("dahua-geheim");expect(response.body).not.toContain("cipher-password");
+  });
   it("koppelt een camera optioneel aan een geldige locatie en recorder",async()=>{const locationId="22222222-2222-4222-8222-222222222222";const recorderId="33333333-3333-4333-8333-333333333333";prismaMock.vpnLocation.findUnique.mockResolvedValue({id:locationId});prismaMock.recorder.findFirst.mockResolvedValue({id:recorderId});prismaMock.camera.create.mockResolvedValue({...camera("Recorder camera"),locationId,recorderId});app=buildServer();const response=await app.inject({method:"POST",url:"/cameras",payload:{...createBody("Recorder camera"),locationId,recorderId}});expect(response.statusCode).toBe(201);expect(prismaMock.camera.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({locationId,recorderId})}))});
   it("maakt een camera met een nieuwe unieke naam succesvol aan", async () => {
     prismaMock.camera.create.mockResolvedValue(camera("Unieke camera"));

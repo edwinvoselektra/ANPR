@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const schema = readFileSync(resolve(process.cwd(), "prisma/schema.prisma"), "utf8");
 
 describe("Prisma-datamodel", () => {
-  it.each(["User", "Role", "Permission", "UserSession", "Camera", "CameraZone", "VpnLocation", "Recorder", "Passage", "Vehicle", "PlateDetection", "PlateGroup", "PlateGroupMember", "Hit", "HitGroup", "Notification", "PushSubscription", "NotificationPreference", "NotificationPreferenceGroup", "AuditLog", "SystemSetting", "RetentionException"])("bevat model %s", (model) => {
+  it.each(["User", "Role", "Permission", "UserSession", "Camera", "CameraZone", "VpnLocation", "Recorder", "DeviceConnection", "Passage", "Vehicle", "PlateDetection", "PlateGroup", "PlateGroupMember", "Hit", "HitGroup", "Notification", "PushSubscription", "NotificationPreference", "NotificationPreferenceGroup", "AuditLog", "SystemSetting", "RetentionException"])("bevat model %s", (model) => {
     expect(schema).toContain(`model ${model} {`);
   });
   it("koppelt camera's optioneel en veilig aan locatie en recorder",()=>{expect(schema).toMatch(/locationId\s+String\?/);expect(schema).toMatch(/vpnLocation\s+VpnLocation\?\s+@relation\([^\n]*onDelete: Restrict\)/);expect(schema).toMatch(/recorder\s+Recorder\?\s+@relation\([^\n]*onDelete: Restrict\)/)});
@@ -25,6 +25,13 @@ describe("Prisma-datamodel", () => {
     expect(schema).toContain("DAHUA_CAMERA");
     expect(schema).toContain("anprConnectionStatus");
     expect(schema).toContain("@@unique([cameraId, source, sourceEventId])");
+  });
+  it("ondersteunt een additieve Dahua TCP-transportlaag naast RTSP",()=>{
+    expect(schema).toContain("enum DeviceConnectionType");
+    expect(schema).toContain("DAHUA_TCP_SDK");
+    expect(schema).toMatch(/model DeviceConnection \{[\s\S]*?port\s+Int\s+@default\(37777\)/);
+    expect(schema).toMatch(/@@unique\(\[cameraId, type\]\)/);
+    expect(schema).toMatch(/@@unique\(\[recorderId, type\]\)/);
   });
   it("bewaart één hit per passage met meerdere gekoppelde groepen", () => {
     expect(schema).toMatch(/model Hit \{[\s\S]*?@@unique\(\[passageId\]\)/);

@@ -3,14 +3,14 @@ import type { PrismaClient } from "@prisma/client";
 import { createCameraRepository } from "./repository.js";
 
 describe("camera repository", () => {
-  it("haalt uitsluitend actieve camera's dynamisch uit PostgreSQL", async () => {
+  it("haalt uitsluitend actieve camera's met RTSP-transport dynamisch uit PostgreSQL", async () => {
     const findMany = vi.fn().mockResolvedValue([]);
     const prisma = { camera: { findMany } } as unknown as PrismaClient;
     const repository = createCameraRepository(prisma);
 
     await repository.listActive();
 
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { active: true } }));
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { active: true, rtspHost: { not: null } } }));
   });
 
   it("werkt camerastatus alleen bij wanneer de camera nog actief is", async () => {

@@ -113,6 +113,25 @@ enum LocationConnectionStatus {
   OFFLINE
 }
 
+enum DeviceConnectionType {
+  DAHUA_TCP_SDK
+}
+
+enum DeviceCategory {
+  CAMERA
+  NVR
+  AUTO
+}
+
+enum DeviceConnectionStatus {
+  UNKNOWN
+  CONNECTING
+  CONNECTED
+  AUTH_FAILED
+  OFFLINE
+  ERROR
+}
+
 model User {
   id                 String               @id @default(uuid()) @db.Uuid
   email              String               @unique
@@ -235,6 +254,7 @@ model Camera {
   recorderId               String?              @db.Uuid
   vpnLocation              VpnLocation?          @relation(fields: [locationId], references: [id], onDelete: Restrict)
   recorder                 Recorder?             @relation(fields: [recorderId], references: [id], onDelete: Restrict)
+  deviceConnections        DeviceConnection[]
 
   @@index([active, displayOrder])
   @@index([status])
@@ -287,9 +307,43 @@ model Recorder {
   updatedAt      DateTime    @updatedAt
   location       VpnLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
   cameras        Camera[]
+  deviceConnections DeviceConnection[]
 
   @@unique([locationId, name])
   @@index([locationId])
+}
+
+model DeviceConnection {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  type                  DeviceConnectionType
+  cameraId              String?                @db.Uuid
+  recorderId            String?                @db.Uuid
+  host                  String
+  port                  Int                    @default(37777)
+  usernameEncrypted     String?
+  passwordEncrypted     String?
+  requestedCategory     DeviceCategory         @default(AUTO)
+  detectedCategory      DeviceCategory?
+  status                DeviceConnectionStatus @default(UNKNOWN)
+  model                  String?
+  firmware               String?
+  serialNumber           String?
+  channelCount           Int?
+  channels               Json?
+  capabilities          Json?
+  lastTestAt             DateTime?
+  lastSuccessAt          DateTime?
+  lastErrorCode          String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  camera                 Camera?                @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  recorder               Recorder?              @relation(fields: [recorderId], references: [id], onDelete: Cascade)
+
+  @@unique([cameraId, type])
+  @@unique([recorderId, type])
+  @@index([status])
+  @@index([cameraId])
+  @@index([recorderId])
 }
 
 model CameraZone {
