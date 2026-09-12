@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { detectAndCreateHit } from "./lib/hit-detection.js";
 
-const input={passageId:"11111111-1111-4111-8111-111111111111",cameraId:"22222222-2222-4222-8222-222222222222",normalizedLicensePlate:"12ABC3",location:"TEST",timestamp:new Date("2026-09-03T12:00:00Z"),direction:"INCOMING" as const,source:"DEMO" as const};
+const input={passageId:"11111111-1111-4111-8111-111111111111",cameraId:"22222222-2222-4222-8222-222222222222",normalizedLicensePlate:"12ABC3",location:"TEST",timestamp:new Date("2026-09-03T12:00:00Z"),direction:"INCOMING" as const,source:"DAHUA_CAMERA" as const};
 const match=(id:string,name:string)=>({groupId:id,reason:`Reden ${name}`,group:{id,name}});
 
 describe("hitdetectie",()=>{
@@ -9,3 +9,5 @@ describe("hitdetectie",()=>{
   it("maakt voor één passage precies één hit met meerdere groepen en zet de centrale pushjob klaar",async()=>{const matches=[match("33333333-3333-4333-8333-333333333333","Aandacht"),match("44444444-4444-4444-8444-444444444444","Prio")];const tx:any={plateGroupMember:{findMany:vi.fn().mockResolvedValue(matches)},hit:{create:vi.fn().mockResolvedValue({id:"55555555-5555-4555-8555-555555555555"})},passage:{update:vi.fn()}};const result=await detectAndCreateHit(tx,input);expect(tx.hit.create).toHaveBeenCalledTimes(1);expect(tx.hit.create).toHaveBeenCalledWith({data:expect.objectContaining({passageId:input.passageId,notificationStatus:"PENDING",groups:{create:[{groupId:matches[0]!.groupId,reason:"Reden Aandacht"},{groupId:matches[1]!.groupId,reason:"Reden Prio"}]}})});expect(tx.passage.update).toHaveBeenCalledWith({where:{id:input.passageId},data:{isHit:true}});expect(result?.groups).toHaveLength(2)});
   it("laat inactieve, verlopen, nog niet geldige en inactieve-groepmatches door PostgreSQL uitsluiten",async()=>{const findMany=vi.fn().mockResolvedValue([]);const tx:any={plateGroupMember:{findMany},hit:{create:vi.fn()},passage:{update:vi.fn()}};await detectAndCreateHit(tx,input);expect(findMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({active:true,group:{active:true,hitEnabled:true},AND:[{OR:[{validFrom:null},{validFrom:{lte:input.timestamp}}]},{OR:[{validUntil:null},{validUntil:{gte:input.timestamp}}]}]})}))});
 });
+
+it("zet demo-push alleen bij expliciete keuze klaar",async()=>{for(const sendPush of [false,true]){const tx:any={plateGroupMember:{findMany:vi.fn().mockResolvedValue([match("fixture","Test")])},hit:{create:vi.fn().mockResolvedValue({id:"fixture"})},passage:{update:vi.fn()}};await detectAndCreateHit(tx,{...input,source:"DEMO",sendPush});expect(tx.hit.create).toHaveBeenCalledWith({data:expect.objectContaining({notificationStatus:sendPush?"PENDING":"SKIPPED"})});}});

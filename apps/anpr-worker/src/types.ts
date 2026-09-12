@@ -8,7 +8,7 @@ export type ManagedAnprCamera = {
   rtspHost: string | null;
   rtspUsernameEncrypted: string | null;
   rtspPasswordEncrypted: string | null;
-  anprProvider: "NONE" | "DAHUA_CGI";
+  anprProvider: "NONE" | "DAHUA_CGI" | "DAHUA_ITSAPI";
   anprHttpProtocol: string;
   anprHttpPort: number;
   anprChannel: number;

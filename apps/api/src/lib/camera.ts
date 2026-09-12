@@ -64,7 +64,8 @@ export function buildRtspUrl(camera: Pick<Camera, "rtspProtocol" | "rtspHost" | 
 }
 
 export function publicCamera(camera: any) {
-  const { rtspUsernameEncrypted, rtspPasswordEncrypted, ...safe } = camera;
+  const { rtspUsernameEncrypted, rtspPasswordEncrypted, uploadRegistration, ...safe } = camera;
+  void uploadRegistration;
   return { ...safe, name: safe.historicalName ?? safe.name, deviceConnections: Array.isArray(safe.deviceConnections) ? safe.deviceConnections.map((connection:any)=>{
     const {usernameEncrypted,passwordEncrypted,...publicConnection}=connection;
     return {...publicConnection,hasUsername:Boolean(usernameEncrypted),hasPassword:Boolean(passwordEncrypted)};

@@ -4,7 +4,7 @@ import type { CameraRepository } from "./types.js";
 export function createCameraRepository(prisma: PrismaClient): CameraRepository {
   return {
     listActive: () => prisma.camera.findMany({
-      where: { active: true, rtspEnabled: true, rtspHost: { not: null } },
+      where: { active: true, isDraft: false, archivedAt: null, rtspEnabled: true, rtspHost: { not: null } },
       select: {
         id: true, name: true, location: true, rtspProtocol: true, rtspHost: true, rtspPort: true,
         rtspPath: true, rtspUsernameEncrypted: true, rtspPasswordEncrypted: true, updatedAt: true

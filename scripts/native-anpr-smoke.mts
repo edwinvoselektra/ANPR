@@ -29,12 +29,17 @@ try {
   assert.equal(outcomes.filter(x=>x.status==="stored").length,1);
   assert.equal(await db.passage.count({where:{cameraId:camera.id}}),1);
   assert.equal(await db.hit.count({where:{cameraId:camera.id}}),1);
+  // Two distinct passages of the same plate within 500 ms must survive the fallback.
+  await service.store({...event,sourceEventId:undefined,occurredAt:new Date(event.occurredAt.getTime()+100)});
+  await service.store({...event,sourceEventId:undefined,occurredAt:new Date(event.occurredAt.getTime()+600)});
+  assert.equal(await db.passage.count({where:{cameraId:camera.id}}),3);
+  assert.equal(await db.hit.count({where:{cameraId:camera.id}}),3);
   const headers={cookie:`anpr_session=${token}`,origin:process.env.WEB_ORIGIN!};
   const denied=await app.inject({method:"DELETE",url:`/cameras/${camera.id}`}); assert.equal(denied.statusCode,401);
   const result=await app.inject({method:"DELETE",url:`/cameras/${camera.id}`,headers}); assert.equal(result.statusCode,204);
   const archived=await db.camera.findUniqueOrThrow({where:{id:camera.id}}); assert(archived.archivedAt); assert.equal(archived.active,false); assert.equal(archived.rtspHost,null);
   assert.equal(await db.cameraZone.count({where:{cameraId:camera.id}}),0);
-  assert.equal(await db.passage.count({where:{cameraId:camera.id}}),1); assert.equal(await db.hit.count({where:{cameraId:camera.id}}),1);
+  assert.equal(await db.passage.count({where:{cameraId:camera.id}}),3); assert.equal(await db.hit.count({where:{cameraId:camera.id}}),3);
   const details=await app.inject({method:"GET",url:`/cameras/${camera.id}`,headers}); assert.equal(details.statusCode,404);
   const history=await app.inject({method:"GET",url:"/passages",headers}); assert.equal(history.statusCode,200); assert.equal(history.json().passages[0].camera.name,marker);
   const hits=await app.inject({method:"GET",url:"/hits",headers}); assert.equal(hits.statusCode,200); assert.equal(hits.json().hits[0].camera.name,marker);

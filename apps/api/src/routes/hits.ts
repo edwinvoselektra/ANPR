@@ -1,11 +1,10 @@
-import { historicalCamera } from "../lib/historical-camera.js";
+import { hitGroupSelect as groupSelect, publicHit } from "../lib/public-hit.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { PERMISSIONS } from "@anpr/shared";
 import { requirePermission } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 
-const groupSelect = { id: true, name: true, color: true, icon: true } as const;
 const hitInclude = {
   camera: { select: { id: true, name: true, historicalName: true, location: true } },
   group: { select: groupSelect },
@@ -14,14 +13,9 @@ const hitInclude = {
     id: true, displayLicensePlate: true, originalLicensePlate: true, normalizedLicensePlate: true,
     timestamp: true, location: true, direction: true, source: true, plateConfidence: true,
     vehicleColor: true, vehicleType: true, vehicleBrand: true,
-    vehicleImage1ObjectId: true, plateImageObjectId: true
+    vehicleImage1ObjectId: true, vehicleImage2ObjectId: true, plateImageObjectId: true, rawEventMetadata: true, createdAt: true
   } }
 } as const;
-
-function publicHit(hit: any) {
-  const groups = hit.groups.length ? hit.groups.map((link: any) => ({ ...link.group, reason: link.reason })) : [{ ...hit.group, reason: hit.reason }];
-  return { ...historicalCamera(hit), groups };
-}
 
 export async function hitRoutes(app: FastifyInstance) {
   app.get("/hits", { preHandler: requirePermission(PERMISSIONS.HITS_VIEW) }, async (request, reply) => {

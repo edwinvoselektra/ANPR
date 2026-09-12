@@ -10,21 +10,14 @@ const result = (overrides: Partial<ProcessResult> = {}): ProcessResult => ({
 });
 
 describe("gescheiden RTSP- en snapshotstatus", () => {
-  it("meldt RTSP geslaagd maar snapshot niet beschikbaar bij een frametimeout", async () => {
-    const execute = vi.fn()
-      .mockResolvedValueOnce(result())
-      .mockResolvedValueOnce(result({ code: null, stdout: Buffer.alloc(0), timedOut: true }));
-
-    const test = await testRtsp("rtsp://camera/stream", true, execute);
-
-    expect(test).toMatchObject({
-      success: true,
-      rtspVideo: { status: "SUCCESS" },
-      snapshot: { status: "UNAVAILABLE", code: "TIMEOUT" }
-    });
-    expect(test.snapshotObjectId).toBeUndefined();
+  it("accepteert metadata zonder gedecodeerd frame niet als video", async () => {
+    const test = await testRtsp("rtsp://camera/stream", true, vi.fn().mockResolvedValue(result()));
+    expect(test).toMatchObject({ success: false, code: "NO_DECODED_VIDEO", snapshot: { code: "DEPENDENCY_FAILED" } });
   });
-
+  it("meldt een frametimeout als mislukte video en slaat snapshot over", async () => {
+    const test = await testRtsp("rtsp://camera/stream", true, vi.fn().mockResolvedValue(result({code:null,timedOut:true,stdout:Buffer.alloc(0)})));
+    expect(test).toMatchObject({success:false,code:"TIMEOUT",snapshot:{code:"DEPENDENCY_FAILED"}});
+  });
   it("geeft een veilige authenticatiefout voor video en snapshot", async () => {
     const execute = vi.fn().mockResolvedValue(result({ code: 1, stderr: "401 Unauthorized", stdout: Buffer.alloc(0) }));
 
@@ -34,7 +27,7 @@ describe("gescheiden RTSP- en snapshotstatus", () => {
       success: false,
       code: "AUTHENTICATION_FAILED",
       rtspVideo: { status: "FAILED", code: "AUTHENTICATION_FAILED" },
-      snapshot: { status: "UNAVAILABLE", code: "AUTHENTICATION_FAILED" }
+      snapshot: { status: "UNAVAILABLE", code: "DEPENDENCY_FAILED" }
     });
     expect(JSON.stringify(test)).not.toContain("rtsp://camera/stream");
   });
@@ -45,11 +38,11 @@ describe("gescheiden RTSP- en snapshotstatus", () => {
     const test = await testRtsp("rtsp://camera/stream", true, execute);
 
     expect(test).toMatchObject({ success: false, code: "STREAM_NOT_FOUND" });
-    expect(test.snapshot.message).toContain("channel en subtype");
+    expect(test.rtspVideo.message).toContain("channel en subtype");
   });
 
   it("slaat snapshotcontrole expliciet over wanneer deze niet is gevraagd", async () => {
-    const execute = vi.fn().mockResolvedValue(result());
+    const execute = vi.fn().mockResolvedValue(result({stdout:Buffer.from([0xff,0xd8,0xff,0xd9])}));
 
     const test = await testRtsp("rtsp://camera/stream", false, execute);
 

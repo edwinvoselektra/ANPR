@@ -14,7 +14,7 @@ export async function testDahua(input: { host: string; protocol: "http" | "https
     if (!/^multipart\/x-mixed-replace\s*;/i.test(contentType) || !/boundary\s*=\s*(?:"[^"\r\n]{1,200}"|[^;\s]{1,200})/i.test(contentType)) {
       return { success: false, authenticated, apiAvailable, code: "ANPR_UNSUPPORTED", message: "Authenticatie geslaagd, maar geen ondersteunde ANPR-eventstream gevonden." };
     }
-    return { success: true, authenticated, apiAvailable, code: "ANPR_AVAILABLE", message: "Authenticatie geslaagd; de native Dahua-eventstream is beschikbaar. Een echte passage moet kentekenherkenning nog bevestigen." };
+    return { success: true, authenticated, apiAvailable, code: "ANPR_AVAILABLE", message: "Authenticatie geslaagd; de Dahua CGI-eventstream is beschikbaar. Een echte passage moet kentekenherkenning nog bevestigen." };
   } catch (error) {
     const raw = error instanceof Error ? error.message : "";
     const systemCode = (error as NodeJS.ErrnoException)?.code ?? "";

@@ -1,4 +1,4 @@
-# Dahua Native ANPR (ITSAPI): native camera-events
+# Dahua CGI-eventstream: native camera-events
 
 RTSP = videostream, live/video-preview en snapshots. Native ANPR = kentekenherkenning in de camera met events en metadata. Deze provider gebruikt geen server-OCR en is geen TCP-poorttest.
 
@@ -12,7 +12,7 @@ Gekozen: langdurige HTTP(S) Digest-subscriptie op:
 /cgi-bin/snapManager.cgi?action=attachFileProc&channel=1&heartbeat=5&Flags[0]=Event&Events=[TrafficJunction]
 ```
 
-Dit is de bestaande native CGI-methode, in de interface benoemd als **Dahua Native ANPR (ITSAPI)**. De interne provider-ID `DAHUA_CGI` blijft behouden voor compatibiliteit. Er wordt geen afzonderlijk, ongedocumenteerd `/itsapi`-endpoint verzonnen en geen camera-uploadconfiguratie gewijzigd.
+Dit is de bestaande native CGI-methode, nu in de interface correct benoemd als **Dahua CGI-eventstream (alternatief)**. De eerdere ITSAPI-benaming was onjuist. De interne provider-ID `DAHUA_CGI` blijft behouden. Voor de aparte ITSAPI-uploadreceiver en V1.19-paden: zie [ITSAPI-ontvanger](itsapi-receiver.md).
 
 Op 11 september 2026 is op de lokale DHI-ITC413-PW4D-IZ3 (`192.168.178.248`, HTTP 80, kanaal 1) met de opgeslagen versleutelde credentials daadwerkelijk HTTP 200 en `multipart/x-mixed-replace; boundary=myboundary` vastgesteld. Zonder authenticatie antwoordde de camera met 401. Dit bevestigt de native eventverbinding; het bevestigt nog geen fysieke kentekenpassage of de geleverde beeldsoorten.
 
@@ -25,8 +25,8 @@ Voor een nieuwe camera:
 1. **Camera’s → Camera toevoegen**. Geef een unieke naam, locatie en rijrichting op.
 2. Kies RTSP en invoer via losse velden. Host `192.168.178.248`, RTSP-poort `554`, pad `/cam/realmonitor?channel=1&subtype=0`. Vul de camera-inloggegevens in. Een volledige RTSP-URL blijft mogelijk.
 3. Test RTSP en haal een snapshot op. Een host zoals `http://192.168.178.248/` wordt door de API genormaliseerd. Credentials, poorten en paden horen in de daarvoor bestemde velden of in de volledige RTSP-URL.
-4. In de ANPR-stap: kies **Dahua Native ANPR (ITSAPI)**, protocol **HTTP**, HTTP-poort **80**, Dahua-kanaal **1**.
-5. Klik **ITSAPI / ANPR testen**. De knop gebruikt dezelfde inloggegevens. Bij bewerken wordt een leeg wachtwoordveld aangevuld uit de versleutelde opslag. Verkeerde credentials of een anonieme HTTP 200 geven geen groene successtatus.
+4. In de ANPR-stap: kies **Dahua CGI-eventstream (alternatief)**, protocol **HTTP**, HTTP-poort **80**, Dahua-kanaal **1**.
+5. Klik **CGI-eventstream testen**. De knop gebruikt dezelfde inloggegevens. Bij bewerken wordt een leeg wachtwoordveld aangevuld uit de versleutelde opslag. Verkeerde credentials of een anonieme HTTP 200 geven geen groene successtatus.
 6. Rond de wizard af, schakel de camera in en sla op. De worker neemt de configuratie standaard binnen 10 seconden over. De wizard hoeft niet open te blijven.
 7. Controleer **Systeemstatus → Cameraverbindingen**: RTSP, snapshot, native eventverbinding, laatste event en laatste fout.
 

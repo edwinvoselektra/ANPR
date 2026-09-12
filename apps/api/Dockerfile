@@ -15,7 +15,7 @@ COPY packages packages
 FROM base AS development
 RUN npm run db:generate
 RUN npm run build -w @anpr/shared
-EXPOSE 4000
+EXPOSE 4000 7070
 
 FROM development AS build
 RUN npm run build -w @anpr/api
@@ -31,5 +31,5 @@ COPY --from=build /app/packages/shared ./packages/shared
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 USER node
-EXPOSE 4000
+EXPOSE 4000 7070
 CMD ["node", "apps/api/dist/server.js"]

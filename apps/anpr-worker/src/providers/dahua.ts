@@ -1,3 +1,4 @@
+import { splitDahuaImages } from "./dahua-images.js";
 import { dahuaEventPath } from "@anpr/shared/dahua";
 import { boundaryFromContentType } from "../multipart.js";
 import { decryptCredential } from "../credentials.js";
@@ -59,6 +60,15 @@ export class DahuaAnprProvider implements AnprEventProvider {
         pending = { fields };
         schedule();
       } else if (contentType === "image/jpeg" && pending) {
+        const split = splitDahuaImages(pending.fields,part.body);
+        if(split.declared){
+          pending.overviewImage=split.overviewImage??pending.overviewImage;
+          pending.plateImage=split.plateImage??pending.plateImage;
+          pending.extraImage=split.extraImage??pending.extraImage;
+          pending.imageDiagnostics={...pending.imageDiagnostics};
+          for(const [kind,status] of Object.entries(split.diagnostics)) if(pending.imageDiagnostics[kind]!=="RECEIVED") pending.imageDiagnostics[kind]=status;
+          schedule();return;
+        }
         const image = { contentType: "image/jpeg" as const, data: part.body };
         if (imageKind(part.headers) === "plate") pending.plateImage = image;
         else if (!pending.overviewImage) pending.overviewImage = image;

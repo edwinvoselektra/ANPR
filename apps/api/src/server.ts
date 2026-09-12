@@ -1,3 +1,5 @@
+import { buildItsapiReceiver } from "./itsapi-receiver.js";
+import { onboardingRoutes, cleanupCameraDrafts } from "./routes/camera-onboarding.js";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
@@ -30,6 +32,11 @@ export function buildServer() {
   void app.register(cookie);
   void app.register(helmet, { contentSecurityPolicy: false });
   void app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
+
+  app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("Cache-Control", "private, no-store");
+    return payload;
+  });
 
   app.addHook("onRequest", async (request, reply) => {
     if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method) && request.headers.cookie) {
@@ -75,6 +82,7 @@ export function buildServer() {
   void app.register(authRoutes);
   void app.register(userRoutes);
   void app.register(cameraRoutes);
+  void app.register(onboardingRoutes);
   void app.register(dashboardRoutes);
   void app.register(simulatorRoutes);
   void app.register(passageRoutes);
@@ -91,11 +99,13 @@ export function buildServer() {
 const executedFile = process.argv[1];
 if (executedFile && fileURLToPath(import.meta.url) === resolve(executedFile)) {
   const app = buildServer();
+  const receiver = buildItsapiReceiver();
+  const cleanup = setInterval(() => void cleanupCameraDrafts().catch(() => app.log.warn("Conceptopruiming tijdelijk mislukt")), 60_000);
   let stopNotifications: () => void = () => undefined;
   let stopLocationHealth: () => void = () => undefined;
-  const shutdown = async () => { stopNotifications(); stopLocationHealth(); await app.close(); await prisma.$disconnect(); process.exit(0); };
+  const shutdown = async () => { clearInterval(cleanup); await receiver.close(); stopNotifications(); stopLocationHealth(); await app.close(); await prisma.$disconnect(); process.exit(0); };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
-  try { await app.listen({ host: "0.0.0.0", port: config.API_PORT }); stopNotifications = startNotificationDispatcher(app.log); stopLocationHealth=startLocationHealthChecks(); }
+  try { await receiver.listen({ host: "0.0.0.0", port: config.ITSAPI_PORT }); await app.listen({ host: "0.0.0.0", port: config.API_PORT }); stopNotifications = startNotificationDispatcher(app.log); stopLocationHealth=startLocationHealthChecks(); }
   catch (error) { app.log.error(error); await prisma.$disconnect(); process.exit(1); }
 }

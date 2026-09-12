@@ -42,6 +42,7 @@ enum PassageSource {
 enum CameraAnprProvider {
   NONE
   DAHUA_CGI
+  DAHUA_ITSAPI
 }
 
 enum AnprConnectionStatus {
@@ -209,6 +210,16 @@ model UserSession {
 }
 
 model Camera {
+  isDraft                  Boolean              @default(false)
+  draftKey                 String?              @unique @db.Uuid
+  draftExpiresAt           DateTime?
+  configVersion            Int                  @default(1)
+  videoTest                Json?
+  videoTestVersion         Int?
+  videoTestAt              DateTime?
+  uploadRegistration       ItsapiRegistration?
+  uploadInbox              ItsapiInbox[]
+
   rtspEnabled              Boolean              @default(true)
   archivedAt               DateTime?
   historicalName           String?
@@ -618,4 +629,52 @@ model RetentionException {
 
   @@index([passageId])
   @@index([newExpiresAt])
+}
+
+// A registration is independent of the credentials used to read video from the camera.
+model ItsapiRegistration {
+  cameraId             String   @id @db.Uuid
+  camera               Camera   @relation(fields: [cameraId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  username             String   @unique
+  passwordEncrypted    String
+  expectedDeviceId     String?
+  protocolVersion      String?
+  receiverOrigin       String?
+  heartbeatSeconds     Int      @default(300)
+  debugUntil           DateTime?
+  lastRequestAt        DateTime?
+  lastAuthenticatedAt  DateTime?
+  lastIdentityAt       DateTime?
+  lastHeartbeatAt      DateTime?
+  lastEventAt          DateTime?
+  lastErrorCode        String?
+  evidenceVersion      Int?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model ItsapiDigestReplay {
+  key        String   @id
+  count      Int
+  expiresAt  DateTime
+  @@index([expiresAt])
+}
+
+// Unknown protocol messages contain shape-only evidence, never an unfiltered request body.
+model ItsapiInbox {
+  id            String   @id @default(uuid()) @db.Uuid
+  cameraId      String   @db.Uuid
+  camera        Camera   @relation(fields: [cameraId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  configVersion Int
+  fingerprint   String
+  state         String   @default("UNSUPPORTED")
+  kind          String   @default("UNKNOWN")
+  evidence      Json
+  attempts      Int      @default(1)
+  receivedAt    DateTime @default(now())
+  lastReceivedAt DateTime @default(now())
+  expiresAt     DateTime
+  @@unique([cameraId, configVersion, fingerprint])
+  @@index([expiresAt])
+  @@index([cameraId, receivedAt])
 }

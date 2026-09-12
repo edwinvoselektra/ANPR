@@ -9,3 +9,10 @@ dist
 storage/*
 coverage
 *.log
+
+# Private runtime files and temporary browser sessions never enter build context.
+.env.*
+!.env.example
+data/
+.agents/
+.codex/

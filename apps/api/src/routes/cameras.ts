@@ -7,7 +7,7 @@ import { z } from "zod";
 import { normalizeCameraHost, PERMISSIONS } from "@anpr/shared";
 import { config } from "../config.js";
 import { audit } from "../lib/audit.js";
-import { requirePermission } from "../lib/auth.js";
+import { requireAdmin, requirePermission } from "../lib/auth.js";
 import { buildRtspUrl, encryptedConnection, parseConnection, publicCamera } from "../lib/camera.js";
 import { testDahua } from "../lib/dahua-test.js";
 import { decryptSecret, encryptSecret } from "../lib/crypto.js";
@@ -34,7 +34,7 @@ const cameraBody = rtspFields.merge(z.object({
   direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]), latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
   longitude: z.coerce.number().min(-180).max(180).nullable().optional(), active: z.boolean().default(false),
   displayOrder: z.coerce.number().int().min(0).max(10_000).default(0), offlineTimeoutSeconds: z.coerce.number().int().min(30).max(86_400).default(120),
-  zone: zone.optional(), anprProvider: z.enum(["NONE", "DAHUA_CGI"]).default("NONE"),
+  zone: zone.optional(), anprProvider: z.enum(["NONE", "DAHUA_CGI", "DAHUA_ITSAPI"]).default("NONE"),
   anprHttpProtocol: z.enum(["http", "https"]).default("http"),
   anprHttpPort: z.coerce.number().int().min(1).max(65535).default(80),
   anprChannel: z.coerce.number().int().min(1).max(64).default(1)
@@ -55,7 +55,7 @@ const updateBody = z.object({
   connectionMode: z.enum(["URL", "FIELDS"]).optional(), rtspUrl: z.string().max(2048).optional(),
   rtspHost: z.string().max(253).optional(), rtspPort: z.coerce.number().int().min(1).max(65535).optional(),
   rtspPath: z.string().max(1000).optional(), username: z.string().max(200).optional(), password: z.string().max(500).optional()
-  , anprProvider: z.enum(["NONE", "DAHUA_CGI"]).optional(), anprHttpProtocol: z.enum(["http", "https"]).optional(),
+  , anprProvider: z.enum(["NONE", "DAHUA_CGI", "DAHUA_ITSAPI"]).optional(), anprHttpProtocol: z.enum(["http", "https"]).optional(),
   anprHttpPort: z.coerce.number().int().min(1).max(65535).optional(), anprChannel: z.coerce.number().int().min(1).max(64).optional()
   , locationId: z.string().uuid().nullable().optional(), recorderId: z.string().uuid().nullable().optional()
   , primaryConnection: z.enum(["RTSP", "DAHUA_TCP_SDK"]).optional(), rtspEnabled: z.boolean().optional(), dahuaTcp: dahuaTcp.nullable().optional()
@@ -72,7 +72,7 @@ async function validateLocationLink(locationId?: string|null, recorderId?: strin
   }
 }
 
-function capabilities(provider: "NONE" | "DAHUA_CGI") {
+function capabilities(provider: "NONE" | "DAHUA_CGI" | "DAHUA_ITSAPI") {
   return { rtsp: true, snapshot: true, cameraAnpr: provider !== "NONE", eventStream: provider !== "NONE", plateCrop: provider !== "NONE", vehicleMetadata: provider !== "NONE" };
 }
 
@@ -158,9 +158,9 @@ export async function cameraRoutes(app: FastifyInstance) {
         const data=encryptedDahuaConnection(body.dahuaTcp,existing);
         await tx.deviceConnection.upsert({where:{cameraId_type:{cameraId:id,type:"DAHUA_TCP_SDK"}},create:{cameraId:id,...data},update:data});
       }
-      return tx.camera.update({ where: { id }, data: {
-        rtspEnabled: body.rtspEnabled, name: body.name, location: body.location, description: body.description, direction: body.direction,
-        latitude: body.latitude, longitude: body.longitude, active: body.active,
+      return tx.camera.update({ where: { id, archivedAt: null }, data: {
+        configVersion: { increment: 1 }, rtspEnabled: body.rtspEnabled, name: body.name, location: body.location, description: body.description, direction: body.direction,
+        latitude: body.latitude, longitude: body.longitude, active: current.isDraft ? false : body.active,
         status: body.active === false ? "DISABLED" : body.active === true && current.status === "DISABLED" ? "OFFLINE" : undefined,
         displayOrder: body.displayOrder, offlineTimeoutSeconds: body.offlineTimeoutSeconds,
         anprProvider: body.anprProvider, anprHttpProtocol: body.anprHttpProtocol, anprHttpPort: body.anprHttpPort, anprChannel: body.anprChannel,
@@ -176,7 +176,7 @@ export async function cameraRoutes(app: FastifyInstance) {
     return { camera: publicCamera(camera) };
   });
 
-  app.delete("/cameras/:id", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request, reply) => {
+  app.delete("/cameras/:id", { preHandler: requireAdmin() }, async (request, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const camera = await prisma.camera.findUnique({ where: { id }, include: { _count: { select: { passages: true, hits: true } } } });
     if (!camera) return reply.code(204).send();
@@ -184,12 +184,15 @@ export async function cameraRoutes(app: FastifyInstance) {
     {
       await prisma.$transaction(async (tx) => {
         await tx.camera.update({ where: { id }, data: {
+          configVersion: { increment: 1 }, videoTest: Prisma.DbNull, videoTestAt: null, videoTestVersion: null, draftExpiresAt: null,
           archivedAt: new Date(), historicalName: camera.name, name: `archived:${id}`,
           active: false, rtspEnabled: false, status: "DISABLED", anprProvider: "NONE", anprConnectionStatus: "DISABLED",
           rtspHost: null, rtspPath: null, rtspUsernameEncrypted: null, rtspPasswordEncrypted: null,
           lastSnapshotObjectId: null, anprSettings: Prisma.DbNull, vehicleDetectionSettings: Prisma.DbNull,
           capabilities: Prisma.DbNull, locationId: null, recorderId: null
         } });
+        await tx.itsapiRegistration.deleteMany({ where: { cameraId: id } });
+        await tx.itsapiInbox.deleteMany({ where: { cameraId: id } });
         await tx.cameraZone.deleteMany({ where: { cameraId: id } });
         await tx.deviceConnection.deleteMany({ where: { cameraId: id } });
       });
@@ -221,10 +224,10 @@ export async function cameraRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const camera = await prisma.camera.findUniqueOrThrow({ where: { id, archivedAt: null } });
     const result = await testRtsp(buildRtspUrl(camera));
-    await prisma.camera.update({ where: { id }, data: result.success ? {
+    await prisma.camera.updateMany({ where: { id, archivedAt: null, configVersion: camera.configVersion }, data: { videoTest: result as Prisma.InputJsonValue, videoTestAt: new Date(), videoTestVersion: camera.configVersion, lastSnapshotObjectId: result.snapshotObjectId ?? null, ...(result.success ? {
       status: camera.active ? "ONLINE" : "DISABLED", lastConnectionAt: new Date(), lastConnectionSuccessAt: new Date(),
-      lastConnectionError: null, lastConnectionErrorCode: null, lastSnapshotObjectId: result.snapshotObjectId ?? camera.lastSnapshotObjectId
-    } : { status: camera.active ? "CONNECTION_PROBLEM" : "DISABLED", lastConnectionAt: new Date(), lastConnectionError: result.message, lastConnectionErrorCode: result.code } });
+      lastConnectionError: null, lastConnectionErrorCode: null
+    } : { status: camera.active ? "CONNECTION_PROBLEM" : "DISABLED", lastConnectionAt: new Date(), lastConnectionError: result.message, lastConnectionErrorCode: result.code }) } });
     await audit(request, "CAMERA_CONNECTION_TESTED", { objectType: "Camera", objectId: id, metadata: { success: result.success, errorCode: result.success ? undefined : result.code } });
     return result;
   });

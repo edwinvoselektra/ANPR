@@ -40,9 +40,10 @@ describe("centrale hit-pushverwerking", () => {
   it("levert een relevante hit één keer per apparaat en nooit dubbel bij herstart", async () => {
     const one = subscription("44444444-4444-4444-8444-444444444444");
     const two = subscription("55555555-5555-4555-8555-555555555555");
-    const { db } = database([recipient({ subscriptions: [one, two] })]);
+    const { db, raw } = database([recipient({ subscriptions: [one, two] })]);
     await dispatchHit(db, HIT, sender); await dispatchHit(db, HIT, sender);
     expect(sender.send).toHaveBeenCalledTimes(2);
+    expect(raw.hit.update).toHaveBeenLastCalledWith({where:{id:HIT},data:{notificationSent:true,notificationStatus:"SENT"}});
     expect(sender.send.mock.calls[0]?.[1]).toContain(`/hits/${HIT}`);
   });
 

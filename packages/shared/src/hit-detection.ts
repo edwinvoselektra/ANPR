@@ -5,7 +5,7 @@ type HitTransaction = Pick<Prisma.TransactionClient, "plateGroupMember" | "hit" 
 export async function detectAndCreateHit(tx: HitTransaction, input: {
   passageId: string; cameraId: string; normalizedLicensePlate: string; location: string;
   timestamp: Date; direction: CameraDirection; source: PassageSource;
-  vehicleImageObjectId?: string | null; plateImageObjectId?: string | null;
+  sendPush?: boolean; vehicleImageObjectId?: string | null; plateImageObjectId?: string | null;
 }) {
   const matches = await tx.plateGroupMember.findMany({
     where: {
@@ -26,7 +26,7 @@ export async function detectAndCreateHit(tx: HitTransaction, input: {
     normalizedLicensePlate: input.normalizedLicensePlate, location: input.location,
     timestamp: input.timestamp, vehicleImageObjectId: input.vehicleImageObjectId,
     plateImageObjectId: input.plateImageObjectId, reason: primary.reason,
-    notificationStatus: "PENDING",
+    notificationStatus: input.source === "DEMO" && input.sendPush !== true ? "SKIPPED" : "PENDING",
     groups: { create: matches.map((match) => ({ groupId: match.groupId, reason: match.reason })) }
   } });
   await tx.passage.update({ where: { id: input.passageId }, data: { isHit: true } });

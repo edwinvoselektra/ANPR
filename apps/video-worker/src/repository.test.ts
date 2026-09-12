@@ -10,7 +10,7 @@ describe("camera repository", () => {
 
     await repository.listActive();
 
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { active: true, rtspEnabled: true, rtspHost: { not: null } } }));
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { active: true, isDraft: false, archivedAt: null, rtspEnabled: true, rtspHost: { not: null } } }));
   });
 
   it("werkt camerastatus alleen bij wanneer de camera nog actief is", async () => {

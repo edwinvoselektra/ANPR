@@ -12,3 +12,19 @@
 @media(max-width:1100px){.cards{grid-template-columns:repeat(3,1fr)}.camera-grid,.passage-grid,.hit-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:800px){.sidebar{transform:translateX(-100%);transition:transform .2s}.sidebar.open{transform:none}.scrim{position:fixed;inset:0;background:rgba(2,6,23,.55);border:0;z-index:20}.main{margin:0;padding:20px}.mobile-header{display:flex;align-items:center;gap:12px;margin:-20px -20px 22px;padding:14px 16px;background:var(--navy);color:#fff}.cards{grid-template-columns:1fr 1fr}.grid-2,.login,.passage-detail-grid,.settings-grid{grid-template-columns:1fr}.settings-wide{grid-column:auto}.login-visual{display:none}.camera-grid,.passage-grid,.hit-grid{grid-template-columns:1fr}.detail-list{grid-template-columns:1fr 1fr}.steps .step-label{display:none}.form-grid,.summary{grid-template-columns:1fr}.field.full{grid-column:auto}.page-header{align-items:flex-start}.page-header .button{white-space:nowrap}.wizard-preview{height:clamp(170px,48vw,260px);max-height:38vh}.snapshot-zone{height:clamp(210px,56vw,360px);max-height:48vh}.history-row{grid-template-columns:86px 1fr}.history-row>.badge{grid-column:2}.search-toolbar{flex-direction:column}.search-toolbar input{max-width:none}.settings-grid .status-row{align-items:flex-start;flex-direction:column}.settings-grid .inline-actions{width:100%}.settings-grid .inline-actions .button{flex:1}}
 @media(max-width:480px){.main{padding:16px}.mobile-header{margin:-16px -16px 18px}.cards,.detail-list{grid-template-columns:1fr}.page-header{flex-direction:column}.page-header .button{width:100%}.wizard-card{padding:18px}.mode-select{grid-template-columns:1fr}.wizard-preview{height:clamp(160px,54vw,230px);max-height:34vh}.snapshot-zone{height:clamp(200px,62vw,300px);max-height:44vh}.wizard-navigation{margin:22px -18px -18px;padding:12px 18px calc(12px + env(safe-area-inset-bottom))}.wizard-navigation .button{min-width:0;flex:1}}
+
+/* Evidence-based camera onboarding and diagnostics */
+.diagnostic-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px;margin-top:18px}
+.diagnostic-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.diagnostic-check h3{margin:0 0 10px}.diagnostic-check p{overflow-wrap:anywhere}.diagnostic-check small{color:var(--muted)}
+.wizard ol.steps{padding:0;list-style:none}.wizard details{margin-top:18px}.wizard summary{cursor:pointer;font-weight:600;padding:12px 0}
+pre{max-width:100%;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:640px){.wizard .steps{display:grid;grid-template-columns:1fr 1fr;gap:10px}.wizard .step{padding:6px;min-width:0}.wizard .step span{overflow-wrap:anywhere}.diagnostic-heading{flex-wrap:wrap}.actions{flex-wrap:wrap}}
+
+.dashboard-hit-groups { display: grid; gap: 6px; margin-top: 8px; }
+.dashboard-hit-groups div { display: grid; gap: 2px; }
+.dashboard-hit-groups span { font-size: 12px; overflow-wrap: anywhere; }
+.hit-link > small { display: block; margin-top: 4px; }
+
+/* Let dashboard cards shrink so their tables scroll within the mobile viewport. */
+.grid-2 > .card { min-width: 0; }

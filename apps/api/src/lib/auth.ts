@@ -37,3 +37,12 @@ export function requirePermission(permission: string) {
     }
   };
 }
+
+export function requireAdmin() {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    await authenticate(request, reply);
+    if (reply.sent) return;
+    if (!request.authUser?.roles.some(role => role === "ADMIN" || role === "Administrator"))
+      return reply.code(403).send({ error: "ADMIN_REQUIRED", message: "Alleen een administrator mag deze actie uitvoeren." });
+  };
+}

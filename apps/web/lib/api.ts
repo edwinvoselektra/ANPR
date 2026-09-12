@@ -20,5 +20,5 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 
 export function formatDate(value?: string | null) {
   if (!value) return "Nog niet";
-  return new Intl.DateTimeFormat("nl-NL", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("nl-NL", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Amsterdam" }).format(new Date(value));
 }

@@ -111,16 +111,15 @@ Stop het volgen van logs met `Ctrl+C`; de containers blijven draaien.
 
 ## Camera toevoegen en RTSP testen
 
-1. Log in als Administrator.
-2. Kies **Camera’s** en **Camera toevoegen**.
-3. Vul naam, locatie, omschrijving, richting en eventueel coördinaten in.
-4. Kies een volledige RTSP-URL of losse host/poort/path/credentials.
-5. Klik **Verbinding testen**. De API gebruikt echt `ffprobe` en probeert één snapshot
-   met FFmpeg te maken.
-6. Teken eventueel een rechthoek op de snapshot.
-7. Kies bij een compatibele Dahua-camera eventueel **Dahua CGI TrafficJunction**,
-   plus de HTTP(S)-poort en het camerakanaal. Laat dit anders uitgeschakeld.
-8. Controleer het overzicht en sla de camera op.
+1. Log in als Administrator en kies **Camera’s → Camera toevoegen**.
+2. **Camera:** naam, locatie, lokaal netwerk of bestaande VPN-locatie, host en camera-inlog.
+3. **Beeld controleren:** test een nieuw gedecodeerd RTSP-frame en snapshot. Een open poort of streammetadata is onvoldoende. Verdergaan zonder beeld kan met een expliciete waarschuwing.
+4. **Kentekengegevens koppelen:** stel voor de hervatbare conceptcamera de afzonderlijke ITSAPI-uploadinlog, bestaande Device ID en het bevestigde LAN-/VPN-serveradres in.
+5. **Praktijktest en afronden:** controleer de afzonderlijke diagnose en sla desgewenst op met openstaande tests.
+
+Afwijkende RTSP-gegevens en de bestaande transport-/zonewizard staan onder **Geavanceerd**. De bestaande CGI-eventstream blijft beschikbaar als alternatief; dit is geen ITSAPI. VPN is behouden.
+
+**ITSAPI-status:** diagnostische receiver aanwezig; echte registratie, heartbeat, payloadmapping en ACK nog niet geverifieerd. Zie [ontvanger, camerakaart, ontbrekend protocolbewijs en testprocedure](docs/itsapi-receiver.md). De camera bevestigt V1.19, `/NotificationInfo/KeepAlive` en `/NotificationInfo/TollgateInfo`. Intern luistert de API op 7070; op deze Windows-pc bezet AnyDesk poort 7070 en publiceert Docker daarom **7071** (`ITSAPI_PUBLISHED_PORT=7071` in lokale `.env`). Voorgesteld adres: **`http://192.168.178.18:7071`**, nog door admin te bevestigen.
 
 Camera-credentials worden met AES-256-GCM versleuteld opgeslagen. De browser krijgt
 opgeslagen credentials en volledige credential-URL's nooit terug.
@@ -437,6 +436,21 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 Fase 2.5 Live camera's, server-OCR en productiedeployment zijn niet gestart. Eerst
 volgt de handmatige ER605- en recorder-test uit de handleiding.
 
-### Dahua Native ANPR (ITSAPI)
+### Dahua-camera’s: ITSAPI en CGI afzonderlijk
 
-Native Dahua-events gebruiken de kentekenherkenning in de camera; RTSP blijft voor video en snapshots. De wizard heeft een geauthenticeerde **ITSAPI / ANPR testen**-knop. Camera verwijderen archiveert de referentie en behoudt historische passages/hits. Zie [configuratie, lokale cameraverificatie en fysieke testprocedure](docs/dahua-native-anpr.md).
+De vierstappenwizard en diagnose onderscheiden video, ontvanger, authenticatie, registratie, heartbeat en passage. De ITSAPI-hardwarekoppeling is nog niet voltooid. [Implementatie, instellingen en testmatrix](docs/itsapi-receiver.md) beschrijven het bewijs en de resterende stappen. Het bestaande [CGI-alternatief](docs/dahua-native-anpr.md) behoudt zijn eigen naam en werking.
+
+Verwijderen vereist adminrechten, trekt camera- en uploadcredentials in en archiveert de referentie voor historische passages/hits. Schakel ITSAPI vervolgens zelf uit op de fysieke camera. Demo-push vereist nu een expliciete keuze.
+
+
+### Groepshits, dashboard en gebeurtenisbeelden
+
+Een actieve groep met **HIT aan** geeft bij een geldig actief lid één Hit per passage, met alle matchende groepen en redenen. Er bestaat geen aanvullend individueel HIT-vinkje. Het dashboard leest Hit-records rechtstreeks, gebruikt voor teller en de laatste vijf hits dezelfde dag in **Europe/Amsterdam**, en ververst iedere drie seconden. Demo blijft meetellen zoals voorheen, met expliciete demo-aantallen en labels.
+
+De huidige echte testcamera gebruikt **DAHUA_CGI**. Laat deze werkende provider behouden. Drie samengevoegde JPEG-beelden zijn daadwerkelijk aangetroffen; de worker splitst overzicht, kenteken en voertuig volgens de ontvangen offsets en lengtes. Oude passages worden niet achteraf gewijzigd. ITSAPI V1.19 is nog een diagnostische ontvanger zonder bewezen heartbeat-/ANPR-parser of ACK.
+
+Zie [bevindingen, regressietests en exacte praktijktest](docs/group-hit-dashboard.md).
+
+### Publieke HTTPS-testomgeving
+
+Voor `https://anpr.vanmilligentechniek.com` gebruikt de expliciete overlay `docker-compose.external.yml` een echte productiebuild, met behoud van de bestaande tunnel. De gewone Compose-configuratie blijft lokale ontwikkelmodus. Zie [oorzaak van de Next.js-403, startcommando’s en HTTPS-/sessietests](docs/external-https-test.md). Gebruik voor externe web/API-updates steeds beide Compose-bestanden.

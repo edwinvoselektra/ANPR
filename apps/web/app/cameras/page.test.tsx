@@ -36,6 +36,7 @@ describe("cameraoverzicht verwijderen", () => {
     const deleteResponse = new Promise<void>((resolve) => { resolveDelete = resolve; });
     let listRequests = 0;
     apiMock.mockImplementation((path: string, options?: RequestInit) => {
+      if (path === "/auth/me") return Promise.resolve({user:{roles:["ADMIN"]}});
       if (path === "/cameras" && !options?.method) {
         listRequests += 1;
         return Promise.resolve({ cameras: listRequests === 1 ? [camera] : [] });

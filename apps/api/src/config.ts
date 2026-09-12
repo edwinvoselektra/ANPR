@@ -8,6 +8,8 @@ const schema = z.object({
   WEB_ORIGIN: z.string().url(),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
   STORAGE_PATH: z.string().min(1).default("/app/storage"),
+  ITSAPI_PUBLISHED_PORT: z.coerce.number().int().min(1).max(65535).default(7070),
+  ITSAPI_PORT: z.coerce.number().int().min(1024).max(65535).default(7070),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   DEMO_MODE: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   VAPID_PUBLIC_KEY: z.string().trim().optional().transform((value) => value || undefined),

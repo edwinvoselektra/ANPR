@@ -4,7 +4,7 @@ import type { CameraRepository } from "./types.js";
 export function createCameraRepository(prisma: PrismaClient): CameraRepository {
   return {
     listEnabled: () => prisma.camera.findMany({
-      where: { active: true, anprProvider: "DAHUA_CGI" },
+      where: { active: true, isDraft: false, archivedAt: null, anprProvider: "DAHUA_CGI" },
       select: {
         id: true, name: true, location: true, direction: true, rtspHost: true,
         rtspUsernameEncrypted: true, rtspPasswordEncrypted: true, anprProvider: true,
@@ -12,15 +12,15 @@ export function createCameraRepository(prisma: PrismaClient): CameraRepository {
       }, orderBy: { id: "asc" }
     }),
     async markConnecting(id) {
-      await prisma.camera.updateMany({ where: { id, active: true, anprProvider: "DAHUA_CGI" }, data: { anprConnectionStatus: "CONNECTING" } });
+      await prisma.camera.updateMany({ where: { id, active: true, isDraft: false, archivedAt: null, anprProvider: "DAHUA_CGI" }, data: { anprConnectionStatus: "CONNECTING" } });
     },
     async markConnected(id, at) {
-      await prisma.camera.updateMany({ where: { id, active: true, anprProvider: "DAHUA_CGI" }, data: {
+      await prisma.camera.updateMany({ where: { id, active: true, isDraft: false, archivedAt: null, anprProvider: "DAHUA_CGI" }, data: {
         anprConnectionStatus: "CONNECTED", lastAnprConnectionAt: at, lastAnprErrorCode: null, lastAnprError: null
       } });
     },
     async markDisconnected(id, code, message) {
-      await prisma.camera.updateMany({ where: { id, active: true, anprProvider: "DAHUA_CGI" }, data: {
+      await prisma.camera.updateMany({ where: { id, active: true, isDraft: false, archivedAt: null, anprProvider: "DAHUA_CGI" }, data: {
         anprConnectionStatus: code === "STREAM_DISCONNECTED" ? "DISCONNECTED" : "ERROR", lastAnprErrorCode: code, lastAnprError: message
       } });
     },

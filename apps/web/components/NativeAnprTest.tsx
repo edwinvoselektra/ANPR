@@ -20,8 +20,8 @@ export function NativeAnprTest({ connection }: { connection: Record<string, unkn
     } finally { setBusy(false); }
   };
   return <div className="field full">
-    <p>Native Dahua ANPR gebruikt de camera voor kentekenherkenning. RTSP verzorgt video en snapshots. De HTTP-interface hergebruikt de camera-inloggegevens.</p>
-    <button type="button" className="button secondary" disabled={busy} onClick={test}>{busy ? "ANPR-interface testen…" : "ITSAPI / ANPR testen"}</button>
+    <p>De CGI-eventstream gebruikt de camera voor kentekenherkenning. RTSP verzorgt video en snapshots. De HTTP-interface hergebruikt de camera-inloggegevens.</p>
+    <button type="button" className="button secondary" disabled={busy} onClick={test}>{busy ? "ANPR-interface testen…" : "CGI-eventstream testen"}</button>
     <div className="summary" aria-live="polite">
       <p>Dahua API: {current ? current.apiAvailable ? "Beschikbaar" : "Niet bevestigd" : "Niet getest"}</p>
       <p>Authenticatie: {current ? current.authenticated ? "Geslaagd" : "Niet geslaagd" : "Niet getest"}</p>

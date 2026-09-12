@@ -62,7 +62,7 @@ describe("simulator camerakeuze", () => {
     expect(body.enabled).toBe(true);
     expect(body.cameras).toEqual([{ id: CAMERA_ID, name: "Eigen Camera Dorp", location: "Dorpstraat 1" }]);
     // De keuzelijst vraagt uitsluitend actieve camera's op; geen hardcoded naamlijst.
-    expect(prismaMock.camera.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { active: true } }));
+    expect(prismaMock.camera.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { active: true, isDraft: false, archivedAt: null } }));
   });
 
   it("koppelt een gesimuleerde passage en hit aan de daadwerkelijk gekozen camera", async () => {
@@ -77,7 +77,7 @@ describe("simulator camerakeuze", () => {
     expect(createCall.data).toMatchObject({ cameraId: CAMERA_ID, location: "Dorpstraat 1", direction: "INCOMING", source: "DEMO", isHit: false });
     expect(prismaMock.passage.update).toHaveBeenCalledWith({ where: { id: PASSAGE_ID }, data: { isHit: true } });
     expect(prismaMock.hit.create).toHaveBeenCalledWith({ data: expect.objectContaining({
-      cameraId: CAMERA_ID, groupId: GROUP_ID, location: "Dorpstraat 1", normalizedLicensePlate: "12ABC3", notificationStatus: "PENDING"
+      cameraId: CAMERA_ID, groupId: GROUP_ID, location: "Dorpstraat 1", normalizedLicensePlate: "12ABC3", notificationStatus: "SKIPPED"
     }) });
   });
 

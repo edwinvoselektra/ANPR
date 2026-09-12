@@ -12,6 +12,8 @@ const prismaMock = vi.hoisted(() => ({
     findUniqueOrThrow: vi.fn()
   },
   cameraZone: { deleteMany: vi.fn() },
+  itsapiRegistration: { deleteMany: vi.fn() },
+  itsapiInbox: { deleteMany: vi.fn() },
   deviceConnection: { deleteMany: vi.fn() },
   auditLog: { create: vi.fn() },
   vpnLocation: { findUnique: vi.fn() },
@@ -22,7 +24,7 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock("./lib/prisma.js", () => ({ prisma: prismaMock }));
 vi.mock("./lib/auth.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./lib/auth.js")>();
-  return { ...actual, requirePermission: () => async () => undefined };
+  return { ...actual, requireAdmin: () => async () => undefined, requirePermission: () => async () => undefined };
 });
 
 import { buildServer } from "./server.js";

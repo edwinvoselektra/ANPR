@@ -59,7 +59,8 @@ export async function dispatchHit(db: PrismaClient, hitId: string, sender: PushS
         where: { deduplicationKey }, update: {},
         create: { hitId: hit.id, recipientId: user.id, subscriptionId: subscription.id, deduplicationKey, channel: "WEB_PUSH" }
       });
-      if (delivery.status === "SENT" || delivery.status === "PROCESSING") continue;
+      if (delivery.status === "SENT") { sent += 1; continue; }
+      if (delivery.status === "PROCESSING") continue;
       const claimed = await db.notification.updateMany({ where: { id: delivery.id, status: "PENDING" }, data: { status: "PROCESSING" } });
       if (!claimed.count) continue;
       let delivered = false;
@@ -73,7 +74,7 @@ export async function dispatchHit(db: PrismaClient, hitId: string, sender: PushS
           ]);
           delivered = true;
           sent += 1;
-          logger.info({ hitId: hit.id, subscriptionId: subscription.id }, "Pushmelding afgeleverd");
+          logger.info({ hitId: hit.id, subscriptionId: subscription.id }, "Pushmelding aangeboden aan pushdienst");
           break;
         } catch (error) {
           lastFailure = pushFailure(error);

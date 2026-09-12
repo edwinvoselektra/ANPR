@@ -17,10 +17,8 @@ export class PassageService {
     const sourceEventId = event.sourceEventId ?? `fallback:${createHash("sha256").update(JSON.stringify([
       event.cameraId, event.normalizedPlate, event.occurredAt.toISOString(), event.lane ?? null
     ])).digest("hex")}`;
-    const duplicateWhere = event.sourceEventId
-      ? { cameraId: event.cameraId, source: event.source, sourceEventId: event.sourceEventId }
-      : { cameraId: event.cameraId, source: event.source, normalizedLicensePlate: event.normalizedPlate, lane: event.lane ?? null,
-          timestamp: { gte: new Date(event.occurredAt.getTime() - this.options.dedupeWindowMs), lte: new Date(event.occurredAt.getTime() + this.options.dedupeWindowMs) } };
+    // Exact event identity: never merge separate passages because their plates are close in time.
+    const duplicateWhere = { cameraId: event.cameraId, source: event.source, sourceEventId };
     if (await this.options.prisma.passage.findFirst({ where: duplicateWhere, select: { id: true } })) return { status: "duplicate" };
 
     const stored: string[] = [];
@@ -42,12 +40,18 @@ export class PassageService {
       const plateObjectId = await storeImage(event.plateImage);
       const extraObjectId = await storeImage(event.extraImage);
       if (!overviewObjectId && !plateObjectId) this.options.logger.warn(JSON.stringify({ cameraId: event.cameraId, provider: event.source, eventId: sourceEventId, processingResult: "NO_EVENT_IMAGES" }));
-      const camera = await this.options.prisma.camera.findFirst({ where: { id: event.cameraId, active: true }, select: { id: true, location: true, direction: true } });
+      const camera = await this.options.prisma.camera.findFirst({ where: { id: event.cameraId, active: true, isDraft: false, archivedAt: null }, select: { id: true, location: true, direction: true } });
       if (!camera) throw new Error("CAMERA_NOT_ACTIVE");
       const direction = event.direction ?? camera.direction;
+      const metadata = { ...event.rawMetadata,
+        imageOriginalStored: Boolean(overviewObjectId), imagePlateStored: Boolean(plateObjectId), imageVehicleStored: Boolean(extraObjectId),
+        directionSource: event.direction ? "CAMERA_EVENT" : "CAMERA_CONFIGURATION",
+        receivedAt: new Date().toISOString()
+      };
+      if(event.rawMetadata?.vehicleTypeStatus && event.rawMetadata.vehicleTypeStatus!=="MAPPED") this.options.logger.warn(JSON.stringify({cameraId:camera.id,processingResult:"VEHICLE_TYPE_NOT_MAPPED",reason:event.rawMetadata.vehicleTypeStatus}));
       const passage = await this.options.prisma.$transaction(async (tx) => {
         // Serialize against archive/disable: an in-flight event cannot reactivate an archived camera.
-        const active = await tx.camera.updateMany({ where: { id: camera.id, active: true, archivedAt: null }, data: { lastAnprEventAt: new Date() } });
+        const active = await tx.camera.updateMany({ where: { id: camera.id, active: true, isDraft: false, archivedAt: null }, data: { lastAnprEventAt: new Date() } });
         if (active.count !== 1) throw new Error("CAMERA_NOT_ACTIVE");
         if (await tx.passage.findFirst({ where: duplicateWhere, select: { id: true } })) throw new Error("DUPLICATE_EVENT");
         const created = await tx.passage.create({ data: {
@@ -58,7 +62,7 @@ export class PassageService {
           vehicleColor: event.vehicleColor ?? "UNKNOWN", vehicleBrand: event.vehicleBrand, lane: event.lane,
           vehicleImage1ObjectId: overviewObjectId, vehicleImage2ObjectId: extraObjectId, plateImageObjectId: plateObjectId,
           source: "DAHUA_CAMERA", sourceEventId,
-          rawEventMetadata: event.rawMetadata as Prisma.InputJsonValue | undefined,
+          rawEventMetadata: metadata as Prisma.InputJsonValue,
           expiresAt: calculatePassageExpiry(event.occurredAt),
           vehicle: event.vehicleType || event.vehicleColor || event.vehicleBrand ? { create: {
             type: event.vehicleType ?? "UNKNOWN", color: event.vehicleColor ?? "UNKNOWN",

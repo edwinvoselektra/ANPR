@@ -2,7 +2,7 @@ import type { CameraDirection, VehicleColor, VehicleType } from "@prisma/client"
 import { normalizeLicensePlate } from "@anpr/shared";
 import type { EventImage, ManagedAnprCamera, NormalizedAnprEvent } from "../types.js";
 
-export type DahuaRawEvent = { fields: Record<string, string>; overviewImage?: EventImage; plateImage?: EventImage; extraImage?: EventImage };
+export type DahuaRawEvent = { fields: Record<string, string>; overviewImage?: EventImage; plateImage?: EventImage; extraImage?: EventImage; imageDiagnostics?: Record<string,string> };
 
 export function parseDahuaFields(body: Buffer): Record<string, string> {
   if (body.length > 256_000) throw new Error("EVENT_METADATA_TOO_LARGE");
@@ -98,7 +98,18 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
     direction: direction(suffix(raw.fields, ["Direction"])), lane,
     overviewImage: raw.overviewImage, plateImage: raw.plateImage, extraImage: raw.extraImage,
     source: "DAHUA_CAMERA", sourceEventId,
-    rawMetadata: safeMetadata(raw.fields)
+    rawMetadata: {
+      ...safeMetadata(raw.fields), provider: "DAHUA_CGI",
+      vehicleTypeStatus: !type ? "NOT_RECEIVED" : types[type.toLowerCase()] ? "MAPPED" : "UNMAPPED_VALUE",
+      ...(type ? { rawVehicleType: type.slice(0,100) } : {}),
+      ...(color ? { rawVehicleColor: color.slice(0,100) } : {}),
+      ...(suffix(raw.fields,["Direction"]) ? { rawDirection: suffix(raw.fields,["Direction"])!.slice(0,100) } : {}),
+      timeSource: suffix(raw.fields,["UTC"]) ? "UTC" : suffix(raw.fields,["RealUTC"]) ? "RealUTC" : "CAMERA_TIME_OR_RECEIPT",
+      ...(suffix(raw.fields,["UTC"]) && suffix(raw.fields,["RealUTC"]) && Number.isFinite(Number(suffix(raw.fields,["UTC"]))) && Number.isFinite(Number(suffix(raw.fields,["RealUTC"]))) ? { utcDisagreementSeconds: Number(suffix(raw.fields,["UTC"]))-Number(suffix(raw.fields,["RealUTC"])) } : {}),
+      imageOriginalStatus: raw.imageDiagnostics?.ORIGINAL ?? (raw.overviewImage ? "RECEIVED_LEGACY" : "NOT_RECEIVED"),
+      imagePlateStatus: raw.imageDiagnostics?.PLATE_CUTOUT ?? (raw.plateImage ? "RECEIVED_LEGACY" : "NOT_RECEIVED"),
+      imageVehicleStatus: raw.imageDiagnostics?.VEHICLE_BODY_CUTOUT ?? (raw.extraImage ? "RECEIVED_LEGACY" : "NOT_RECEIVED")
+    }
   };
 }
 

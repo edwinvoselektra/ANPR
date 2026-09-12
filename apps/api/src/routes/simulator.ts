@@ -11,7 +11,7 @@ const schema = z.object({
   cameraId: z.string().uuid(), licensePlate: z.string().trim().min(2).max(20).default("12-ABC-3"),
   vehicleColor: z.enum(["BLACK", "WHITE", "GRAY", "SILVER", "RED", "BLUE", "GREEN", "YELLOW", "BROWN", "ORANGE", "OTHER", "UNKNOWN"]).default("BLACK"),
   vehicleType: z.enum(["CAR", "VAN", "TRUCK", "MOTORCYCLE", "BUS", "TRAILER", "UNKNOWN"]).default("CAR"),
-  timestamp: z.string().datetime().optional(),
+  timestamp: z.string().datetime().optional(), sendPush: z.boolean().default(false),
   direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]).optional()
 });
 
@@ -21,7 +21,7 @@ export async function simulatorRoutes(app: FastifyInstance) {
     // Dynamisch uit de echte cameradatabase: elke actieve camera is beschikbaar, ook
     // handmatig toegevoegde; uitgeschakelde camera's zijn niet selecteerbaar.
     cameras: config.DEMO_MODE ? await prisma.camera.findMany({
-      where: { active: true },
+      where: { active: true, isDraft: false, archivedAt: null },
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, location: true }
     }) : []
@@ -32,7 +32,7 @@ export async function simulatorRoutes(app: FastifyInstance) {
     const body = schema.parse(request.body);
     const camera = await prisma.camera.findUnique({ where: { id: body.cameraId } });
     if (!camera) return reply.code(404).send({ error: "CAMERA_NOT_FOUND", message: "De gekozen camera bestaat niet (meer). Ververs de camerakeuze." });
-    if (!camera.active) return reply.code(400).send({ error: "CAMERA_INACTIVE", message: "De gekozen camera is uitgeschakeld en kan niet worden gebruikt voor een demopassage." });
+    if (!camera.active || camera.isDraft || camera.archivedAt) return reply.code(400).send({ error: "CAMERA_INACTIVE", message: "De gekozen camera is uitgeschakeld en kan niet worden gebruikt voor een demopassage." });
     const normalized = normalizeLicensePlate(body.licensePlate);
     const timestamp = body.timestamp ? new Date(body.timestamp) : new Date();
     const direction = body.direction ?? camera.direction;
@@ -49,7 +49,7 @@ export async function simulatorRoutes(app: FastifyInstance) {
       }});
       const hit = await detectAndCreateHit(tx, {
         passageId: created.id, cameraId: camera.id, normalizedLicensePlate: normalized,
-        location: camera.location, timestamp, direction, source: "DEMO"
+        location: camera.location, timestamp, direction, source: "DEMO", sendPush: body.sendPush
       });
       await tx.camera.update({ where: { id: camera.id }, data: { lastVehicleRegistrationAt: timestamp } });
       return { passage: { ...created, isHit: Boolean(hit) }, hit };
