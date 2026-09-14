@@ -132,11 +132,11 @@ export async function plateRoutes(app: FastifyInstance) {
       prisma.passage.findFirst({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, orderBy: { timestamp: "asc" }, select: { timestamp: true } }),
       prisma.passage.findFirst({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, orderBy: { timestamp: "desc" }, select: { timestamp: true, displayLicensePlate: true } }),
       prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, orderBy: [{ timestamp: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit, select: {
-        id: true, timestamp: true, displayLicensePlate: true, vehicleColor: true, vehicleType: true,
+        id: true, timestamp: true, timezone: true, displayLicensePlate: true, vehicleColor: true, vehicleType: true,
         vehicleImage1ObjectId: true, plateImageObjectId: true, source: true, direction: true,
-        camera: { select: { id: true, name: true, historicalName: true, location: true } }
+        camera: { select: { id: true, name: true, historicalName: true, location: true, vpnLocation: { select: { timezone: true } } } }
       } }),
-      prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, distinct: ["cameraId"], select: { camera: { select: { id: true, name: true, historicalName: true, location: true } } } }),
+      prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, distinct: ["cameraId"], select: { camera: { select: { id: true, name: true, historicalName: true, location: true, vpnLocation: { select: { timezone: true } } } } } }),
       prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, distinct: ["vehicleColor"], select: { vehicleColor: true } }),
       prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, distinct: ["vehicleType"], select: { vehicleType: true } })
     ]);

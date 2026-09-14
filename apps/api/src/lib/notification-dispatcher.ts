@@ -1,3 +1,5 @@
+import { directionLabel, normalizeDirection, formatLocalDate, resolveTimeZone } from "@anpr/shared";
+import { config } from "../config.js";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "./prisma.js";
@@ -6,10 +8,12 @@ import { pushConfiguration, pushFailure, webPushSender, type PushSender } from "
 type Logger = { info(value: object, message: string): void; error(value: object, message: string): void };
 const quietLogger: Logger = { info: () => undefined, error: () => undefined };
 
-function payloadFor(hit: { id: string; normalizedLicensePlate: string; reason: string | null; cameraId: string; camera: { name: string; historicalName?: string | null } }) {
+export function payloadFor(hit: { id: string; normalizedLicensePlate: string; reason: string | null; cameraId: string; timestamp?:Date|string; passage?:{direction:string;timezone?:string|null}; camera: { name: string; historicalName?: string | null;vpnLocation?:{timezone:string}|null } }) {
+  const direction=normalizeDirection(hit.passage?.direction);
+  const localTime=hit.timestamp?formatLocalDate(hit.timestamp,resolveTimeZone(hit.passage?.timezone??hit.camera.vpnLocation?.timezone,config.PLATFORM_TIMEZONE)):"";
   return JSON.stringify({
     title: "ANPR Hit",
-    body: `${hit.normalizedLicensePlate} · ${hit.camera.historicalName ?? hit.camera.name}${hit.reason ? ` · ${hit.reason}` : ""}`,
+    body: `${hit.normalizedLicensePlate} · ${hit.camera.historicalName ?? hit.camera.name}${direction!=="UNKNOWN"?` · ${directionLabel(direction)}`:""}${localTime?` · ${localTime}`:""}${hit.reason ? ` · ${hit.reason}` : ""}`,
     data: { hitId: hit.id, url: `/hits/${hit.id}`, cameraId: hit.cameraId }
   });
 }
@@ -25,7 +29,7 @@ async function recordSkipped(db: PrismaClient, hitId: string, recipientId: strin
 export async function dispatchHit(db: PrismaClient, hitId: string, sender: PushSender, logger: Logger = quietLogger) {
   const hit = await db.hit.findUnique({
     where: { id: hitId },
-    include: { camera: { select: { name: true, historicalName: true } }, groups: { select: { groupId: true } } }
+    include: { camera: { select: { name: true, historicalName: true, vpnLocation:{select:{timezone:true}} } }, passage:{select:{direction:true,timezone:true}}, groups: { select: { groupId: true } } }
   });
   if (!hit) return;
   const groupIds = new Set(hit.groups.map(({ groupId }) => groupId));

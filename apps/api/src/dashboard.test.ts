@@ -51,7 +51,7 @@ describe("dashboard Laatste hits", () => {
     expect(body.recentHits[0]?.group.name).toBe("Aandacht");
     // Laatste hits haalt de cameranaam expliciet mee vanuit de gekoppelde camera.
     expect(prismaMock.hit.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      include: expect.objectContaining({ camera: { select: { name: true, historicalName: true } } })
+      include: expect.objectContaining({ camera: { select: { name: true, historicalName: true, vpnLocation: { select: { timezone: true } } } } })
     }));
   });
 });

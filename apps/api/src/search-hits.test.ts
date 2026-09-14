@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
-const prismaMock=vi.hoisted(()=>({passage:{findMany:vi.fn(),count:vi.fn()},hit:{findMany:vi.fn(),findUnique:vi.fn(),count:vi.fn()}}));
+const prismaMock=vi.hoisted(()=>({camera:{findUnique:vi.fn().mockResolvedValue(null)},passage:{findMany:vi.fn(),count:vi.fn()},hit:{findMany:vi.fn(),findUnique:vi.fn(),count:vi.fn()}}));
 vi.mock("./lib/prisma.js",()=>({prisma:prismaMock}));
 vi.mock("./lib/auth.js",async(importOriginal)=>{const actual=await importOriginal<typeof import("./lib/auth.js")>();return{...actual,requirePermission:()=>async()=>undefined}});
 import { buildServer } from "./server.js";

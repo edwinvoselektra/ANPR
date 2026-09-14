@@ -546,3 +546,10 @@ een korte timeout en blokkeert localhost, loopback, link-local, multicast en adr
 waarnaar een hostnaam veilig opnieuw is geresolved. Alleen `cameras.manage` mag testen of
 wijzigen. De video-worker selecteert alleen actieve camera's met een RTSP-host, zodat een
 TCP-only configuratie geen foutieve videoloop start.
+
+
+## Mobiel, tijdzones en rijrichting (14 september 2026)
+
+De bestaande `VpnLocation` draagt nu een IANA-tijdzone. Nieuwe passages bewaren de opgeloste zone naast de UTC-timestamp. Gedeelde Luxon-utilities verzorgen presentatie en lokale zoekgrenzen; genormaliseerde passage-richting is INCOMING/OUTGOING/UNKNOWN. Historische BOTH blijft leesbaar als Onbekend. CGI geeft RealUTC voorrang op UTC, zonder historische herschrijving.
+
+Livebeelden blijven op verzoek buiten deze fase. De bestaande video-worker blijft uitsluitend snapshots en cameragezondheid verwerken; HLS/WebRTC, browserrestreaming en main/substreamkeuzes zijn toekomstwerk. Zie [ontwerp, tests, grenzen en handmatige stappen](mobile-time-direction.md).

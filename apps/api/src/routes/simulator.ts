@@ -1,3 +1,4 @@
+import { normalizeDirection, resolveTimeZone } from "@anpr/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { calculatePassageExpiry, displayLicensePlate, normalizeLicensePlate, PERMISSIONS } from "@anpr/shared";
@@ -12,7 +13,7 @@ const schema = z.object({
   vehicleColor: z.enum(["BLACK", "WHITE", "GRAY", "SILVER", "RED", "BLUE", "GREEN", "YELLOW", "BROWN", "ORANGE", "OTHER", "UNKNOWN"]).default("BLACK"),
   vehicleType: z.enum(["CAR", "VAN", "TRUCK", "MOTORCYCLE", "BUS", "TRAILER", "UNKNOWN"]).default("CAR"),
   timestamp: z.string().datetime().optional(), sendPush: z.boolean().default(false),
-  direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]).optional()
+  direction: z.enum(["INCOMING", "OUTGOING", "UNKNOWN", "BOTH"]).optional()
 });
 
 export async function simulatorRoutes(app: FastifyInstance) {
@@ -23,8 +24,8 @@ export async function simulatorRoutes(app: FastifyInstance) {
     cameras: config.DEMO_MODE ? await prisma.camera.findMany({
       where: { active: true, isDraft: false, archivedAt: null },
       orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, location: true }
-    }) : []
+      select: { id: true, name: true, location: true, vpnLocation:{select:{timezone:true}} }
+    }).then(cameras=>cameras.map(({vpnLocation,...camera})=>({...camera,timeZone:resolveTimeZone(vpnLocation?.timezone,config.PLATFORM_TIMEZONE)}))) : []
   }));
 
   app.post("/simulator/passages", { preHandler: requirePermission(PERMISSIONS.SIMULATOR_RUN) }, async (request, reply) => {
@@ -35,13 +36,15 @@ export async function simulatorRoutes(app: FastifyInstance) {
     if (!camera.active || camera.isDraft || camera.archivedAt) return reply.code(400).send({ error: "CAMERA_INACTIVE", message: "De gekozen camera is uitgeschakeld en kan niet worden gebruikt voor een demopassage." });
     const normalized = normalizeLicensePlate(body.licensePlate);
     const timestamp = body.timestamp ? new Date(body.timestamp) : new Date();
-    const direction = body.direction ?? camera.direction;
+    const direction = normalizeDirection(body.direction ?? camera.direction);
+    const region=camera.locationId?await prisma.vpnLocation.findUnique({where:{id:camera.locationId},select:{timezone:true}}):null;
+    const timezone=resolveTimeZone(region?.timezone,config.PLATFORM_TIMEZONE);
     const expiresAt = calculatePassageExpiry(timestamp);
     const passage = await prisma.$transaction(async (tx) => {
       const created = await tx.passage.create({ data: {
         originalLicensePlate: body.licensePlate, normalizedLicensePlate: normalized,
         displayLicensePlate: displayLicensePlate(body.licensePlate), plateConfidence: 0.98,
-        timestamp, cameraId: camera.id, location: camera.location, direction,
+        timestamp, timezone, cameraId: camera.id, location: camera.location, direction,
         vehicleColor: body.vehicleColor, vehicleType: body.vehicleType, vehicleConfidence: 0.95,
         isHit: false, source: "DEMO", expiresAt,
         vehicle: { create: { type: body.vehicleType, color: body.vehicleColor, confidence: 0.95, metadata: { demo: true } } },
@@ -55,6 +58,6 @@ export async function simulatorRoutes(app: FastifyInstance) {
       return { passage: { ...created, isHit: Boolean(hit) }, hit };
     });
     await audit(request, "DEMO_PASSAGE_CREATED", { objectType: "Passage", objectId: passage.passage.id, metadata: { cameraId: camera.id, isHit: Boolean(passage.hit) } });
-    return reply.code(201).send({ passage: { ...passage.passage, isHit: Boolean(passage.hit), demo: true }, hit: Boolean(passage.hit), matchedGroups: passage.hit?.groups ?? [] });
+    return reply.code(201).send({ passage: { ...passage.passage, timeZone:timezone, isHit: Boolean(passage.hit), demo: true }, hit: Boolean(passage.hit), matchedGroups: passage.hit?.groups ?? [] });
   });
 }

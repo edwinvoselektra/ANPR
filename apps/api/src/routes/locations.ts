@@ -1,3 +1,4 @@
+import { validTimeZone } from "@anpr/shared";
 import type { FastifyInstance } from "fastify";
 import { isIP } from "node:net";
 import { z } from "zod";
@@ -19,6 +20,7 @@ const recorderSchema=z.object({
 });
 
 const bodySchema = z.object({
+  timezone:z.string().refine(validTimeZone,"Gebruik een geldige IANA-tijdzone.").optional(),
   name:z.string().trim().min(2).max(100), description:z.string().trim().max(1000).optional(),
   routerType:z.enum(["TP_LINK_OMADA_ER605","MANUAL_OTHER"]), vpnType:z.literal("WIREGUARD").default("WIREGUARD"),
   vpnMode:z.enum(["SERVER_TO_LOCATION","LOCATION_TO_SERVER"]).default("LOCATION_TO_SERVER"),
@@ -64,13 +66,13 @@ export async function locationRoutes(app:FastifyInstance) {
     if(!ipInCidr(config.VPN_SERVER_ADDRESS,config.VPN_TUNNEL_CIDR)) throw new Error("VPN_SERVER_ADDRESS valt niet binnen VPN_TUNNEL_CIDR.");
     const used=(await prisma.vpnLocation.findMany({select:{tunnelAddress:true}})).map((item)=>item.tunnelAddress);
     const tunnelAddress=allocateTunnelAddress(config.VPN_TUNNEL_CIDR,config.VPN_SERVER_ADDRESS,used);
-    const location=await prisma.vpnLocation.create({data:{name:body.name,description:body.description,routerType:body.routerType,vpnType:body.vpnType,vpnMode:body.vpnMode,tunnelAddress,remoteLanCidr:body.remoteLanCidr,remoteGatewayIp:body.remoteGatewayIp,endpointHost:body.endpointHost,listenPort:body.listenPort,mtu:body.mtu,active:body.active,connectionStatus:body.active?"CONNECTING":"OFFLINE",recorders:body.recorder?{create:recorderData(body.recorder)}:undefined},include:{recorders:{include:{deviceConnections:true}},_count:{select:{cameras:true}}}});
+    const location=await prisma.vpnLocation.create({data:{name:body.name,timezone:body.timezone,description:body.description,routerType:body.routerType,vpnType:body.vpnType,vpnMode:body.vpnMode,tunnelAddress,remoteLanCidr:body.remoteLanCidr,remoteGatewayIp:body.remoteGatewayIp,endpointHost:body.endpointHost,listenPort:body.listenPort,mtu:body.mtu,active:body.active,connectionStatus:body.active?"CONNECTING":"OFFLINE",recorders:body.recorder?{create:recorderData(body.recorder)}:undefined},include:{recorders:{include:{deviceConnections:true}},_count:{select:{cameras:true}}}});
     await audit(request,"VPN_LOCATION_CREATED",{objectType:"VpnLocation",objectId:location.id,newValue:publicLocation(location)});
     return reply.code(201).send({location:publicLocation(location)});
   });
   app.patch("/locations/:id",{preHandler:requirePermission(PERMISSIONS.LOCATIONS_MANAGE)},async(request)=>{
     const{id}=z.object({id:z.string().uuid()}).parse(request.params);const body=bodySchema.parse(request.body);await validateNetwork(body,id);const current=await prisma.vpnLocation.findUniqueOrThrow({where:{id},include:{recorders:{include:{deviceConnections:true}}}});
-    const location=await prisma.$transaction(async(tx)=>{if(body.recorder){const{dahuaTcp,...base}=body.recorder;const first=current.recorders[0];const recorder=first?await tx.recorder.update({where:{id:first.id},data:base}):await tx.recorder.create({data:{locationId:id,...base}});if(dahuaTcp===null)await tx.deviceConnection.deleteMany({where:{recorderId:recorder.id,type:"DAHUA_TCP_SDK"}});else if(dahuaTcp){const existing=first?.deviceConnections?.find((item:any)=>item.type==="DAHUA_TCP_SDK");const data=encryptedDahuaConnection(dahuaTcp,existing);await tx.deviceConnection.upsert({where:{recorderId_type:{recorderId:recorder.id,type:"DAHUA_TCP_SDK"}},create:{recorderId:recorder.id,...data},update:data});}}return tx.vpnLocation.update({where:{id},data:{name:body.name,description:body.description,routerType:body.routerType,vpnType:body.vpnType,vpnMode:body.vpnMode,remoteLanCidr:body.remoteLanCidr,remoteGatewayIp:body.remoteGatewayIp,endpointHost:body.endpointHost,listenPort:body.listenPort,mtu:body.mtu,active:body.active,connectionStatus:body.active?undefined:"OFFLINE"},include:{recorders:{include:{deviceConnections:true}},_count:{select:{cameras:true}}}})});
+    const location=await prisma.$transaction(async(tx)=>{if(body.recorder){const{dahuaTcp,...base}=body.recorder;const first=current.recorders[0];const recorder=first?await tx.recorder.update({where:{id:first.id},data:base}):await tx.recorder.create({data:{locationId:id,...base}});if(dahuaTcp===null)await tx.deviceConnection.deleteMany({where:{recorderId:recorder.id,type:"DAHUA_TCP_SDK"}});else if(dahuaTcp){const existing=first?.deviceConnections?.find((item:any)=>item.type==="DAHUA_TCP_SDK");const data=encryptedDahuaConnection(dahuaTcp,existing);await tx.deviceConnection.upsert({where:{recorderId_type:{recorderId:recorder.id,type:"DAHUA_TCP_SDK"}},create:{recorderId:recorder.id,...data},update:data});}}return tx.vpnLocation.update({where:{id},data:{name:body.name,timezone:body.timezone,description:body.description,routerType:body.routerType,vpnType:body.vpnType,vpnMode:body.vpnMode,remoteLanCidr:body.remoteLanCidr,remoteGatewayIp:body.remoteGatewayIp,endpointHost:body.endpointHost,listenPort:body.listenPort,mtu:body.mtu,active:body.active,connectionStatus:body.active?undefined:"OFFLINE"},include:{recorders:{include:{deviceConnections:true}},_count:{select:{cameras:true}}}})});
     await audit(request,"VPN_LOCATION_UPDATED",{objectType:"VpnLocation",objectId:id,oldValue:publicLocation(current),newValue:publicLocation(location)});return{location:publicLocation(location)};
   });
   app.post("/locations/:id/wireguard-config",{preHandler:requirePermission(PERMISSIONS.LOCATIONS_MANAGE)},async(request)=>{

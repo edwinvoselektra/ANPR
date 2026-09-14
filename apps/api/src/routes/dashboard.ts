@@ -19,11 +19,11 @@ export async function loadDashboard(db: PrismaClient = prisma, now = new Date())
     tx.passage.count({ where: passageWhere }),
     tx.hit.count({ where: hitWhere }),
     tx.plateGroupMember.findMany({ where: { active: true, group: { active: true, hitEnabled: true } }, distinct: ["normalizedLicensePlate"], select: { normalizedLicensePlate: true } }),
-    tx.passage.findMany({ where: { status: "ACTIVE" }, take: 8, orderBy: [{ timestamp: "desc" }, { id: "desc" }], include: { camera: { select: { name: true, historicalName: true } } } }),
+    tx.passage.findMany({ where: { status: "ACTIVE" }, take: 8, orderBy: [{ timestamp: "desc" }, { id: "desc" }], include: { camera: { select: { name: true, historicalName: true, vpnLocation: { select: { timezone: true } } } } } }),
     tx.hit.findMany({ where: hitWhere, take: 5, orderBy: [{ timestamp: "desc" }, { id: "desc" }], include: {
-      camera: { select: { name: true, historicalName: true } }, group: { select: hitGroupSelect },
+      camera: { select: { name: true, historicalName: true, vpnLocation: { select: { timezone: true } } } }, group: { select: hitGroupSelect },
       groups: { include: { group: { select: hitGroupSelect } }, orderBy: { group: { name: "asc" } } },
-      passage: { select: { displayLicensePlate: true, source: true } }
+      passage: { select: { displayLicensePlate: true, source: true, direction: true, timezone: true } }
     } }),
     tx.camera.findMany({ where: { active: true, isDraft: false, archivedAt: null, status: { in: ["OFFLINE", "CONNECTION_PROBLEM", "ANPR_UNAVAILABLE"] } }, select: { id: true, name: true, status: true, lastConnectionError: true } }),
     tx.passage.count({ where: { ...passageWhere, source: "DEMO" } }),

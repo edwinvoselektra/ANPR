@@ -90,13 +90,13 @@ function temporaryRtspUrl(body: z.infer<typeof connection>) {
 
 export async function cameraRoutes(app: FastifyInstance) {
   app.get("/cameras", { preHandler: requirePermission(PERMISSIONS.CAMERAS_VIEW) }, async (_request, reply) => {
-    const cameras = await prisma.camera.findMany({ where: { archivedAt: null }, include: { zones: true, deviceConnections: true, _count: { select: { passages: { where: { timestamp: { gte: new Date(Date.now() - 86_400_000) } } } } } }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }] });
+    const cameras = await prisma.camera.findMany({ where: { archivedAt: null }, include: { vpnLocation:{select:{timezone:true}}, zones: true, deviceConnections: true, _count: { select: { passages: { where: { timestamp: { gte: new Date(Date.now() - 86_400_000) } } } } } }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }] });
     return reply.header("Cache-Control", "private, no-store").send({ cameras: cameras.map(publicCamera) });
   });
 
   app.get("/cameras/:id", { preHandler: requirePermission(PERMISSIONS.CAMERAS_VIEW) }, async (request) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
-    return { camera: publicCamera(await prisma.camera.findUniqueOrThrow({ where: { id, archivedAt: null }, include: { zones: true, deviceConnections: true } })) };
+    return { camera: publicCamera(await prisma.camera.findUniqueOrThrow({ where: { id, archivedAt: null }, include: { vpnLocation:{select:{timezone:true}}, zones: true, deviceConnections: true } })) };
   });
 
   app.get("/cameras/name-availability", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request) => {
@@ -120,7 +120,7 @@ export async function cameraRoutes(app: FastifyInstance) {
       locationId: body.locationId, recorderId: body.recorderId,
       deviceConnections: body.dahuaTcp ? { create: encryptedDahuaConnection(body.dahuaTcp) } : undefined,
       zones: body.zone ? { create: { type: body.zone.type, points: body.zone.points } } : undefined
-    }, include: { zones: true, deviceConnections: true } });
+    }, include: { vpnLocation:{select:{timezone:true}}, zones: true, deviceConnections: true } });
     await audit(request, "CAMERA_CREATED", { objectType: "Camera", objectId: camera.id, newValue: publicCamera(camera) });
     return reply.code(201).send({ camera: publicCamera(camera) });
   });
@@ -128,7 +128,7 @@ export async function cameraRoutes(app: FastifyInstance) {
   app.patch("/cameras/:id", { preHandler: requirePermission(PERMISSIONS.CAMERAS_MANAGE) }, async (request) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const body = updateBody.parse(request.body);
-    const current = await prisma.camera.findUniqueOrThrow({ where: { id, archivedAt: null }, include: { zones: true, deviceConnections: true } });
+    const current = await prisma.camera.findUniqueOrThrow({ where: { id, archivedAt: null }, include: { vpnLocation:{select:{timezone:true}}, zones: true, deviceConnections: true } });
     await validateLocationLink(body.locationId === undefined ? current.locationId : body.locationId, body.recorderId === undefined ? current.recorderId : body.recorderId);
     let connectionData = {};
     if (body.rtspEnabled === false && (body.anprProvider ?? current.anprProvider) === "NONE") {
@@ -170,7 +170,7 @@ export async function cameraRoutes(app: FastifyInstance) {
         locationId: body.locationId, recorderId: body.locationId === null ? null : body.recorderId,
         ...connectionData,
         ...(body.rtspEnabled===false && (body.anprProvider ?? current.anprProvider) === "NONE" ?{rtspHost:null,rtspPath:null,rtspUsernameEncrypted:null,rtspPasswordEncrypted:null}:{}),
-      }, include: { zones: true, deviceConnections: true } });
+      }, include: { vpnLocation:{select:{timezone:true}}, zones: true, deviceConnections: true } });
     });
     await audit(request, "CAMERA_UPDATED", { objectType: "Camera", objectId: id, oldValue: publicCamera(current), newValue: publicCamera(camera) });
     return { camera: publicCamera(camera) };

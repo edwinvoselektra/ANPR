@@ -1,3 +1,4 @@
+import { normalizeDirection, resolveTimeZone } from "@anpr/shared";
 import { createHash } from "node:crypto";
 import { detectAndCreateHit } from "@anpr/shared/hit-detection";
 import { Prisma, type PrismaClient } from "@prisma/client";
@@ -40,12 +41,13 @@ export class PassageService {
       const plateObjectId = await storeImage(event.plateImage);
       const extraObjectId = await storeImage(event.extraImage);
       if (!overviewObjectId && !plateObjectId) this.options.logger.warn(JSON.stringify({ cameraId: event.cameraId, provider: event.source, eventId: sourceEventId, processingResult: "NO_EVENT_IMAGES" }));
-      const camera = await this.options.prisma.camera.findFirst({ where: { id: event.cameraId, active: true, isDraft: false, archivedAt: null }, select: { id: true, location: true, direction: true } });
+      const camera = await this.options.prisma.camera.findFirst({ where: { id: event.cameraId, active: true, isDraft: false, archivedAt: null }, select: { id: true, location: true, direction: true, vpnLocation:{select:{timezone:true}} } });
       if (!camera) throw new Error("CAMERA_NOT_ACTIVE");
-      const direction = event.direction ?? camera.direction;
+      const direction = normalizeDirection(event.direction ?? camera.direction);
+      const timezone=resolveTimeZone(camera.vpnLocation?.timezone,process.env.PLATFORM_TIMEZONE);
       const metadata = { ...event.rawMetadata,
         imageOriginalStored: Boolean(overviewObjectId), imagePlateStored: Boolean(plateObjectId), imageVehicleStored: Boolean(extraObjectId),
-        directionSource: event.direction ? "CAMERA_EVENT" : "CAMERA_CONFIGURATION",
+        directionSource: event.direction ? "CAMERA_EVENT" : direction!=="UNKNOWN" ? "CAMERA_CONFIGURATION" : "UNKNOWN",
         receivedAt: new Date().toISOString()
       };
       if(event.rawMetadata?.vehicleTypeStatus && event.rawMetadata.vehicleTypeStatus!=="MAPPED") this.options.logger.warn(JSON.stringify({cameraId:camera.id,processingResult:"VEHICLE_TYPE_NOT_MAPPED",reason:event.rawMetadata.vehicleTypeStatus}));
@@ -55,7 +57,7 @@ export class PassageService {
         if (active.count !== 1) throw new Error("CAMERA_NOT_ACTIVE");
         if (await tx.passage.findFirst({ where: duplicateWhere, select: { id: true } })) throw new Error("DUPLICATE_EVENT");
         const created = await tx.passage.create({ data: {
-          cameraId: camera.id, timestamp: event.occurredAt, location: camera.location, direction,
+          cameraId: camera.id, timezone, timestamp: event.occurredAt, location: camera.location, direction,
           originalLicensePlate: event.originalPlate, normalizedLicensePlate: event.normalizedPlate,
           displayLicensePlate: displayLicensePlate(event.originalPlate), plateConfidence: event.confidence,
           plateCountry: event.plateCountry, vehicleType: event.vehicleType ?? "UNKNOWN",

@@ -36,3 +36,6 @@ describe("Dahua TrafficJunction parser",()=>{
   });
   it("herkent een expliciete plate-crop header",()=>expect(imageKind({"content-type":"image/jpeg","content-disposition":"attachment; filename=plate.jpg"})).toBe("plate"));
 });
+
+it("uses actual RealUTC epoch once while retaining camera UTC for diagnosis",()=>{const real="1789205682",utc="1789209282";const event=normalizeDahuaEvent(camera,{fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12","Events[0].RealUTC":real,"Events[0].UTC":utc,"Events[0].Direction":"Approach"}});expect(event?.occurredAt.toISOString()).toBe(new Date(Number(real)*1000).toISOString());expect(event?.rawMetadata?.UTC).toBe(Number(utc));expect(event?.direction).toBe("INCOMING")});
+it.each([["Leave","OUTGOING"],["Approach","INCOMING"],["0",undefined]])("preserves supported Dahua direction %s without guessing numeric values",(raw,expected)=>{const event=normalizeDahuaEvent(camera,{fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12","Events[0].Direction":raw!}});expect(event?.direction).toBe(expected)});

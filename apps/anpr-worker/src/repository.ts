@@ -6,7 +6,7 @@ export function createCameraRepository(prisma: PrismaClient): CameraRepository {
     listEnabled: () => prisma.camera.findMany({
       where: { active: true, isDraft: false, archivedAt: null, anprProvider: "DAHUA_CGI" },
       select: {
-        id: true, name: true, location: true, direction: true, rtspHost: true,
+        vpnLocation: {select:{timezone:true}}, id: true, name: true, location: true, direction: true, rtspHost: true,
         rtspUsernameEncrypted: true, rtspPasswordEncrypted: true, anprProvider: true,
         anprHttpProtocol: true, anprHttpPort: true, anprChannel: true, updatedAt: true
       }, orderBy: { id: "asc" }

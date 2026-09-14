@@ -12,6 +12,12 @@ PWA en voegt persoonlijke Web Push-hitmeldingen toe. Server-side OCR blijft een 
 > **Belangrijk:** demo-passages zijn geen echte ANPR-detecties. De interface toont ze
 > altijd met bron `DEMO`.
 
+## Mobiel, tijdzones en rijrichting
+
+Live passages en Hits ondersteunen een bewaarde lijst-/tegelkeuze. Locaties hebben een IANA-tijdzone; passage, hit, zoeken en push gebruiken centrale tijd- en richtingverwerking. Zie het [eindrapport en handmatige testplan A–D](docs/mobile-time-direction.md) voor werking en beperkingen. Livebeelden blijven bewust gereserveerd voor een toekomstige fase.
+
+De publieke testomgeving blijft een productiebuild. Gebruik daarvoor altijd de [externe Compose-overlay](docs/external-https-test.md); de basis-Compose blijft lokale ontwikkelmodus.
+
 ## Wat heb je nodig?
 
 - Docker Desktop met werkende WSL-integratie;

@@ -1,3 +1,4 @@
+import { validTimeZone } from "@anpr/shared";
 import { z } from "zod";
 
 const schema = z.object({
@@ -5,6 +6,7 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().url(),
   CAMERA_CREDENTIALS_KEY: z.string().regex(/^[a-fA-F0-9]{64}$/, "moet exact 64 hex-tekens zijn"),
+  PLATFORM_TIMEZONE: z.string().refine(validTimeZone).default("Europe/Amsterdam"),
   WEB_ORIGIN: z.string().url(),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(12),
   STORAGE_PATH: z.string().min(1).default("/app/storage"),

@@ -1,5 +1,5 @@
 import type { CameraDirection, VehicleColor, VehicleType } from "@prisma/client";
-import { normalizeLicensePlate } from "@anpr/shared";
+import { normalizeLicensePlate, parseCameraTime, resolveTimeZone } from "@anpr/shared";
 import type { EventImage, ManagedAnprCamera, NormalizedAnprEvent } from "../types.js";
 
 export type DahuaRawEvent = { fields: Record<string, string>; overviewImage?: EventImage; plateImage?: EventImage; extraImage?: EventImage; imageDiagnostics?: Record<string,string> };
@@ -31,14 +31,6 @@ function confidence(value?: string): number | undefined {
   if (!Number.isFinite(number) || number < 0) return undefined;
   const normalized = number > 1 ? number / 100 : number;
   return normalized <= 1 ? normalized : undefined;
-}
-
-function occurredAt(value: string | undefined, fallback: Date) {
-  if (!value) return fallback;
-  if (/^\d{10}(?:\.\d+)?$/.test(value)) return new Date(Number(value) * 1000);
-  if (/^\d{13}$/.test(value)) return new Date(Number(value));
-  const direct = new Date(value.replace(" ", "T"));
-  return Number.isNaN(direct.getTime()) ? fallback : direct;
 }
 
 const colors: Record<string, VehicleColor> = {
@@ -85,9 +77,11 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
   // GroupID can restart after a camera reboot, so it is only stable together
   // with an event position. A real EventID remains the preferred source key.
   const sourceEventId = eventId ?? (groupId && eventPosition ? `${groupId}:${eventPosition}` : undefined);
+  const timeZone=resolveTimeZone(camera.vpnLocation?.timezone,process.env.PLATFORM_TIMEZONE);
+  const timeField=["RealUTC","UTC","SnapTime","Time"].find(field=>parseCameraTime(suffix(raw.fields,[field]),timeZone));
   return {
     cameraId: camera.id,
-    occurredAt: occurredAt(suffix(raw.fields, ["UTC", "RealUTC", "SnapTime", "Time"]), receivedAt),
+    occurredAt: (timeField?parseCameraTime(suffix(raw.fields,[timeField]),timeZone):undefined)??receivedAt,
     originalPlate,
     normalizedPlate,
     plateCountry: suffix(raw.fields, ["PlateCountry", "Country"]),
@@ -104,7 +98,7 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
       ...(type ? { rawVehicleType: type.slice(0,100) } : {}),
       ...(color ? { rawVehicleColor: color.slice(0,100) } : {}),
       ...(suffix(raw.fields,["Direction"]) ? { rawDirection: suffix(raw.fields,["Direction"])!.slice(0,100) } : {}),
-      timeSource: suffix(raw.fields,["UTC"]) ? "UTC" : suffix(raw.fields,["RealUTC"]) ? "RealUTC" : "CAMERA_TIME_OR_RECEIPT",
+      timeSource: timeField??"RECEIPT_FALLBACK", timeZone,
       ...(suffix(raw.fields,["UTC"]) && suffix(raw.fields,["RealUTC"]) && Number.isFinite(Number(suffix(raw.fields,["UTC"]))) && Number.isFinite(Number(suffix(raw.fields,["RealUTC"]))) ? { utcDisagreementSeconds: Number(suffix(raw.fields,["UTC"]))-Number(suffix(raw.fields,["RealUTC"])) } : {}),
       imageOriginalStatus: raw.imageDiagnostics?.ORIGINAL ?? (raw.overviewImage ? "RECEIVED_LEGACY" : "NOT_RECEIVED"),
       imagePlateStatus: raw.imageDiagnostics?.PLATE_CUTOUT ?? (raw.plateImage ? "RECEIVED_LEGACY" : "NOT_RECEIVED"),

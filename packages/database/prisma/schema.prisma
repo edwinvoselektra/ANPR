@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum CameraDirection {
+  UNKNOWN
   INCOMING
   OUTGOING
   BOTH
@@ -277,6 +278,7 @@ model Camera {
 }
 
 model VpnLocation {
+  timezone                   String @default("Europe/Amsterdam")
   id                         String                   @id @default(uuid()) @db.Uuid
   name                       String                   @unique
   description                String?
@@ -375,6 +377,7 @@ model CameraZone {
 }
 
 model Passage {
+  timezone               String?
   id                     String          @id @default(uuid()) @db.Uuid
   originalLicensePlate   String
   normalizedLicensePlate String

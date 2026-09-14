@@ -5,13 +5,35 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { "./dahua": { "types": "./dist/dahua.d.ts", "default": "./dist/dahua.js" }, "./hit-detection": { "types": "./dist/hit-detection.d.ts", "default": "./dist/hit-detection.js" }, ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p tsconfig.build.json", "typecheck": "tsc --noEmit", "test": "vitest run", "lint": "eslint src --max-warnings=0" },
+  "exports": {
+    "./dahua": {
+      "types": "./dist/dahua.d.ts",
+      "default": "./dist/dahua.js"
+    },
+    "./hit-detection": {
+      "types": "./dist/hit-detection.d.ts",
+      "default": "./dist/hit-detection.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src --max-warnings=0"
+  },
   "devDependencies": {
     "@eslint/js": "9.28.0",
+    "@types/luxon": "3.7.5",
     "eslint": "9.28.0",
     "typescript": "5.8.3",
     "typescript-eslint": "8.34.0",
     "vitest": "3.2.7"
+  },
+  "dependencies": {
+    "luxon": "3.7.2"
   }
 }

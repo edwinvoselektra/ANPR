@@ -40,6 +40,7 @@ services:
       CAMERA_CREDENTIALS_KEY: ${CAMERA_CREDENTIALS_KEY:?CAMERA_CREDENTIALS_KEY ontbreekt}
       NODE_ENV: ${NODE_ENV:-development}
       DEMO_MODE: ${DEMO_MODE:-true}
+      PLATFORM_TIMEZONE: ${PLATFORM_TIMEZONE:-Europe/Amsterdam}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
       STORAGE_PATH: ${STORAGE_PATH:-/app/storage}

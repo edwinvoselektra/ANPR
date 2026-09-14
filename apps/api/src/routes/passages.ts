@@ -11,10 +11,10 @@ import { prisma } from "../lib/prisma.js";
 
 const publicSelect = {
   id: true, originalLicensePlate: true, normalizedLicensePlate: true, displayLicensePlate: true,
-  plateConfidence: true, plateCountry: true, timestamp: true, location: true, direction: true,
+  plateConfidence: true, plateCountry: true, timestamp: true, timezone: true, location: true, direction: true,
   vehicleColor: true, vehicleType: true, vehicleConfidence: true, vehicleBrand: true, lane: true,
   vehicleImage1ObjectId: true, vehicleImage2ObjectId: true, plateImageObjectId: true, isHit: true, status: true, source: true,
-  camera: { select: { id: true, name: true, historicalName: true, location: true } }
+  camera: { select: { id: true, name: true, historicalName: true, location: true, vpnLocation: { select: { timezone: true } } } }
 } as const;
 
 export async function passageRoutes(app: FastifyInstance) {

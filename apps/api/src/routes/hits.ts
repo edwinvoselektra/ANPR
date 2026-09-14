@@ -6,12 +6,12 @@ import { requirePermission } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 
 const hitInclude = {
-  camera: { select: { id: true, name: true, historicalName: true, location: true } },
+  camera: { select: { id: true, name: true, historicalName: true, location: true, vpnLocation: { select: { timezone: true } } } },
   group: { select: groupSelect },
   groups: { include: { group: { select: groupSelect } }, orderBy: { group: { name: "asc" as const } } },
   passage: { select: {
     id: true, displayLicensePlate: true, originalLicensePlate: true, normalizedLicensePlate: true,
-    timestamp: true, location: true, direction: true, source: true, plateConfidence: true,
+    timestamp: true, timezone: true, location: true, direction: true, source: true, plateConfidence: true,
     vehicleColor: true, vehicleType: true, vehicleBrand: true,
     vehicleImage1ObjectId: true, vehicleImage2ObjectId: true, plateImageObjectId: true, rawEventMetadata: true, createdAt: true
   } }

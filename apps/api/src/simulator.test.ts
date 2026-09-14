@@ -60,7 +60,7 @@ describe("simulator camerakeuze", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json() as { enabled: boolean; cameras: Array<{ id: string; name: string }> };
     expect(body.enabled).toBe(true);
-    expect(body.cameras).toEqual([{ id: CAMERA_ID, name: "Eigen Camera Dorp", location: "Dorpstraat 1" }]);
+    expect(body.cameras).toEqual([{ id: CAMERA_ID, name: "Eigen Camera Dorp", location: "Dorpstraat 1", timeZone:"Europe/Amsterdam" }]);
     // De keuzelijst vraagt uitsluitend actieve camera's op; geen hardcoded naamlijst.
     expect(prismaMock.camera.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { active: true, isDraft: false, archivedAt: null } }));
   });

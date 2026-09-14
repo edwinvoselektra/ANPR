@@ -8,6 +8,5 @@ export const vehicleTypes: Record<string, string> = {
   BUS: "Bus", TRAILER: "Aanhanger", UNKNOWN: "Onbekend"
 };
 
-export const directions: Record<string, string> = {
-  INCOMING: "Inkomend", OUTGOING: "Uitgaand", BOTH: "Beide richtingen"
-};
+import {directionLabels} from "@anpr/shared";
+export const directions:Record<string,string>=directionLabels;

@@ -1,6 +1,7 @@
 import type { CameraDirection, VehicleColor, VehicleType } from "@prisma/client";
 
 export type ManagedAnprCamera = {
+  vpnLocation?: {timezone:string}|null;
   id: string;
   name: string;
   location: string;
