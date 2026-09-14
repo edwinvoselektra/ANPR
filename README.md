@@ -16,6 +16,8 @@ PWA en voegt persoonlijke Web Push-hitmeldingen toe. Server-side OCR blijft een 
 
 Live passages en Hits ondersteunen een bewaarde lijst-/tegelkeuze. Locaties hebben een IANA-tijdzone; passage, hit, zoeken en push gebruiken centrale tijd- en richtingverwerking. Zie het [eindrapport en handmatige testplan A–D](docs/mobile-time-direction.md) voor werking en beperkingen. Livebeelden blijven bewust gereserveerd voor een toekomstige fase.
 
+Voor administrators toont **Instellingen** daarnaast compact de betrouwbaar meetbare programma-/platformopslag en de laatste twintig gesaneerde auditregels. Andere gebruikers behouden uitsluitend hun eigen pushinstellingen; auditpayloads en geheimen worden niet naar de browser gestuurd.
+
 De publieke testomgeving blijft een productiebuild. Gebruik daarvoor altijd de [externe Compose-overlay](docs/external-https-test.md); de basis-Compose blijft lokale ontwikkelmodus.
 
 ## Wat heb je nodig?

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, formatDate } from "@/lib/api";
+import { useCurrentUser } from "@/components/app-shell";
 
 type Group = { id: string; name: string; color: string };
 type Device = {
@@ -11,6 +12,19 @@ type Device = {
 type Preferences = { pushEnabled: boolean; allHitGroups: boolean; groupIds: string[] };
 type PageData = { preference: Preferences; subscriptions: Device[]; groups: Group[] };
 type PushConfig = { configured: boolean; publicKey?: string; message: string };
+type AdminOverview = {
+  storage: { programBytes: number | null; storageBytes: number | null; totalBytes: number | null };
+  storageNote: string; timeZone: string;
+  activity: Array<{ id: string; createdAt: string; user: string; action: string; object: string; description: string }>;
+};
+
+function fileSize(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "Niet beschikbaar";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value; let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
+  return `${size.toFixed(unit < 2 ? 0 : 1)} ${units[unit]}`;
+}
 
 function applicationServerKey(value: string) {
   const padding = "=".repeat((4 - value.length % 4) % 4);
@@ -29,8 +43,12 @@ function defaultDeviceName() {
 }
 
 export default function SettingsPage() {
+  const currentUser = useCurrentUser();
+  const admin = currentUser?.roles.some((role) => role === "ADMIN" || role === "Administrator") ?? false;
   const [data, setData] = useState<PageData>();
   const [config, setConfig] = useState<PushConfig>();
+  const [adminOverview, setAdminOverview] = useState<AdminOverview>();
+  const [adminError, setAdminError] = useState("");
   const [preference, setPreference] = useState<Preferences>({ pushEnabled: false, allHitGroups: true, groupIds: [] });
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
   const [message, setMessage] = useState("");
@@ -39,16 +57,21 @@ export default function SettingsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [preferences, configuration] = await Promise.all([
+      const overviewRequest = admin
+        ? api<AdminOverview>("/admin/overview", { cache: "no-store" }).catch(() => { setAdminError("Beheerinformatie is tijdelijk niet beschikbaar."); return undefined; })
+        : Promise.resolve(undefined);
+      const [preferences, configuration, overview] = await Promise.all([
         api<PageData>("/notifications/preferences", { cache: "no-store" }),
-        api<PushConfig>("/notifications/config", { cache: "no-store" })
+        api<PushConfig>("/notifications/config", { cache: "no-store" }),
+        overviewRequest
       ]);
       setData(preferences); setPreference(preferences.preference); setConfig(configuration);
+      setAdminOverview(overview); if (overview) setAdminError("");
       setPermission("Notification" in window && "serviceWorker" in navigator && "PushManager" in window ? Notification.permission : "unsupported");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Meldingsinstellingen ophalen mislukt.");
     }
-  }, []);
+  }, [admin]);
   useEffect(() => { void load(); }, [load]);
 
   const selected = useMemo(() => new Set(preference.groupIds), [preference.groupIds]);
@@ -131,6 +154,24 @@ export default function SettingsPage() {
         <p className="subtitle">Elk actief apparaat ontvangt maximaal één melding per hit.</p>
         <div className="status-list">{data.subscriptions.map((device) => <div className="status-row" key={device.id}><div><strong>{device.deviceName ?? "Onbekend apparaat"}</strong><small>{device.enabled ? "Actief" : "Uitgeschakeld"} · toegevoegd {new Intl.DateTimeFormat("nl-NL", { dateStyle: "medium" }).format(new Date(device.createdAt))}{device.lastSuccessfulAt ? ` · laatst gelukt ${new Intl.DateTimeFormat("nl-NL", { dateStyle: "short", timeStyle: "short" }).format(new Date(device.lastSuccessfulAt))}` : ""}</small></div><div className="inline-actions"><button className="button secondary" disabled={busy || !device.enabled || !config.configured} onClick={() => testDevice(device)}>Testmelding</button><button className="button danger" disabled={busy} onClick={() => removeDevice(device)}>Verwijderen</button></div></div>)}{!data.subscriptions.length && <div className="empty">Nog geen apparaten gekoppeld.</div>}</div>
       </section>
+
+      {admin && <section className="card">
+        <h2>Systeemopslag</h2>
+        {adminOverview ? <><dl className="storage-summary">
+          <div><dt>Programma</dt><dd>{fileSize(adminOverview.storage.programBytes)}</dd></div>
+          <div><dt>Opslag</dt><dd>{fileSize(adminOverview.storage.storageBytes)}</dd></div>
+          <div className="total"><dt>Totaal</dt><dd>{fileSize(adminOverview.storage.totalBytes)}</dd></div>
+        </dl><p className="subtitle">{adminOverview.storageNote}</p></> : <div className="empty">{adminError || "Systeemopslag laden…"}</div>}
+      </section>}
+
+      {admin && <section className="card">
+        <h2>Recente activiteit</h2>
+        {adminOverview ? <div className="activity-list">{adminOverview.activity.map((item) => <article key={item.id}>
+          <time dateTime={item.createdAt}>{formatDate(item.createdAt, adminOverview.timeZone)}</time>
+          <strong>{item.action}</strong><span>{item.object}</span>
+          <small>{item.user} · {item.description}</small>
+        </article>)}{!adminOverview.activity.length && <div className="empty">Nog geen auditactiviteit vastgelegd.</div>}</div> : <div className="empty">{adminError || "Recente activiteit laden…"}</div>}
+      </section>}
     </div>}
   </>;
 }

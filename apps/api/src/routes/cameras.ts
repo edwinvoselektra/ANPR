@@ -196,7 +196,7 @@ export async function cameraRoutes(app: FastifyInstance) {
         await tx.cameraZone.deleteMany({ where: { cameraId: id } });
         await tx.deviceConnection.deleteMany({ where: { cameraId: id } });
       });
-      await audit(request, "CAMERA_ARCHIVED", { objectType: "Camera", objectId: id, metadata: { historicalDataPreserved: true } });
+      await audit(request, "CAMERA_ARCHIVED", { objectType: "Camera", objectId: id, oldValue: publicCamera(camera), metadata: { historicalDataPreserved: true } });
       return reply.code(204).send();
     }
 

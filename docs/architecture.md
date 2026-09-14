@@ -553,3 +553,9 @@ TCP-only configuratie geen foutieve videoloop start.
 De bestaande `VpnLocation` draagt nu een IANA-tijdzone. Nieuwe passages bewaren de opgeloste zone naast de UTC-timestamp. Gedeelde Luxon-utilities verzorgen presentatie en lokale zoekgrenzen; genormaliseerde passage-richting is INCOMING/OUTGOING/UNKNOWN. Historische BOTH blijft leesbaar als Onbekend. CGI geeft RealUTC voorrang op UTC, zonder historische herschrijving.
 
 Livebeelden blijven op verzoek buiten deze fase. De bestaande video-worker blijft uitsluitend snapshots en cameragezondheid verwerken; HLS/WebRTC, browserrestreaming en main/substreamkeuzes zijn toekomstwerk. Zie [ontwerp, tests, grenzen en handmatige stappen](mobile-time-direction.md).
+
+## Compact ADMIN-overzicht op Instellingen (14 september 2026)
+
+`GET /admin/overview` gebruikt de strikte ADMIN-rolcontrole. Programma meet de bestanden die in de draaiende API-container zichtbaar zijn, inclusief haar dependencies en build. Opslag telt de huidige PostgreSQL-database en het gedeelde mediavolume op. Docker-image­lagen, andere containerlagen en Docker-logs zijn niet in de API-container beschikbaar en worden daarom niet geschat. Een niet meetbare categorie en daarmee het totaal wordt als `null`/“Niet beschikbaar” weergegeven.
+
+Dezelfde endpoint selecteert de laatste twintig `AuditLog`-regels op `createdAt DESC, id DESC`. Alleen ID, UTC-tijdstip, actor, vertaald actielabel, afgeleid objectlabel en een korte omschrijving verlaten de API. `oldValue`, `newValue`, `metadata`, IP-adres en alle mogelijke secrets blijven server-side. De UI formatteert het tijdstip centraal in `PLATFORM_TIMEZONE`. Bestaande logging dekt authenticatie, gebruikers/rollen, camera’s, locaties/VPN, kentekens, groepen, pushinstellingen en bestaande passage-acties; de pagina maakt geen nieuwe auditkopieën.
