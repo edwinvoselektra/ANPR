@@ -13,7 +13,7 @@ const schema = z.object({
   vehicleColor: z.enum(["BLACK", "WHITE", "GRAY", "SILVER", "RED", "BLUE", "GREEN", "YELLOW", "BROWN", "ORANGE", "OTHER", "UNKNOWN"]).default("BLACK"),
   vehicleType: z.enum(["CAR", "VAN", "TRUCK", "MOTORCYCLE", "BUS", "TRAILER", "UNKNOWN"]).default("CAR"),
   timestamp: z.string().datetime().optional(), sendPush: z.boolean().default(false),
-  direction: z.enum(["INCOMING", "OUTGOING", "UNKNOWN", "BOTH"]).optional()
+  direction: z.enum(["INCOMING", "OUTGOING", "UNKNOWN"]).default("UNKNOWN")
 });
 
 export async function simulatorRoutes(app: FastifyInstance) {
@@ -36,7 +36,7 @@ export async function simulatorRoutes(app: FastifyInstance) {
     if (!camera.active || camera.isDraft || camera.archivedAt) return reply.code(400).send({ error: "CAMERA_INACTIVE", message: "De gekozen camera is uitgeschakeld en kan niet worden gebruikt voor een demopassage." });
     const normalized = normalizeLicensePlate(body.licensePlate);
     const timestamp = body.timestamp ? new Date(body.timestamp) : new Date();
-    const direction = normalizeDirection(body.direction ?? camera.direction);
+    const direction = normalizeDirection(body.direction);
     const region=camera.locationId?await prisma.vpnLocation.findUnique({where:{id:camera.locationId},select:{timezone:true}}):null;
     const timezone=resolveTimeZone(region?.timezone,config.PLATFORM_TIMEZONE);
     const expiresAt = calculatePassageExpiry(timestamp);

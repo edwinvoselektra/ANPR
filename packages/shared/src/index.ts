@@ -18,6 +18,16 @@ export const VIDEO_WORKER_HEARTBEAT_STALE_MS = 15_000;
 export const ANPR_WORKER_HEARTBEAT_KEY = "anpr:anpr-worker:heartbeat:v1";
 export const ANPR_WORKER_HEARTBEAT_STALE_MS = 15_000;
 
+export const CAMERA_DIRECTION_MAPPINGS = ["TOWARD_CAMERA_IS_INCOMING", "AWAY_FROM_CAMERA_IS_INCOMING"] as const;
+export type CameraDirectionMapping = typeof CAMERA_DIRECTION_MAPPINGS[number];
+export type CameraSourceDirection = "TOWARD_CAMERA" | "AWAY_FROM_CAMERA";
+
+export function mapCameraDirection(source: CameraSourceDirection | undefined, mapping: CameraDirectionMapping): "INCOMING" | "OUTGOING" | "UNKNOWN" {
+  if (!source) return "UNKNOWN";
+  const towardIsIncoming = mapping === "TOWARD_CAMERA_IS_INCOMING";
+  return source === "TOWARD_CAMERA" ? (towardIsIncoming ? "INCOMING" : "OUTGOING") : (towardIsIncoming ? "OUTGOING" : "INCOMING");
+}
+
 export function normalizeLicensePlate(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }

@@ -13,6 +13,11 @@ describe("PassageService",()=>{
   it("maakt precies één hit met alle actieve gematchte groepen en zet de centrale pushjob klaar",async()=>{prisma.plateGroupMember.findMany.mockResolvedValue([{groupId:"33333333-3333-4333-8333-333333333333",reason:"TEST reden",group:{id:"33333333-3333-4333-8333-333333333333",name:"Aandacht"}},{groupId:"44444444-4444-4444-8444-444444444444",reason:"Tweede reden",group:{id:"44444444-4444-4444-8444-444444444444",name:"Prio"}}]);prisma.hit.create.mockResolvedValue({id:"55555555-5555-4555-8555-555555555555"});await new PassageService({prisma,storage,dedupeWindowMs:3000,logger}).store(event);expect(prisma.hit.create).toHaveBeenCalledTimes(1);expect(prisma.hit.create).toHaveBeenCalledWith({data:expect.objectContaining({passageId:"22222222-2222-4222-8222-222222222222",notificationStatus:"PENDING",groups:{create:[{groupId:"33333333-3333-4333-8333-333333333333",reason:"TEST reden"},{groupId:"44444444-4444-4444-8444-444444444444",reason:"Tweede reden"}]}})});});
 });
 
+it("stores UNKNOWN when a real camera event has no direction instead of using camera configuration",async()=>{
+  await new PassageService({prisma,storage,dedupeWindowMs:3000,logger}).store(event);
+  expect(prisma.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({direction:"UNKNOWN"})});
+});
+
 it("preserves plate data when an event image cannot be stored", async () => {
   storage.storePassageImage.mockRejectedValue(new Error("DISK_FULL"));
   const result = await new PassageService({prisma,storage,dedupeWindowMs:3000,logger}).store({...event,overviewImage:{contentType:"image/jpeg",data:Buffer.from([255,216,255,217])}});

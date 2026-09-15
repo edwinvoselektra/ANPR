@@ -43,11 +43,11 @@ export class PassageService {
       if (!overviewObjectId && !plateObjectId) this.options.logger.warn(JSON.stringify({ cameraId: event.cameraId, provider: event.source, eventId: sourceEventId, processingResult: "NO_EVENT_IMAGES" }));
       const camera = await this.options.prisma.camera.findFirst({ where: { id: event.cameraId, active: true, isDraft: false, archivedAt: null }, select: { id: true, location: true, direction: true, vpnLocation:{select:{timezone:true}} } });
       if (!camera) throw new Error("CAMERA_NOT_ACTIVE");
-      const direction = normalizeDirection(event.direction ?? camera.direction);
+      const direction = normalizeDirection(event.direction);
       const timezone=resolveTimeZone(camera.vpnLocation?.timezone,process.env.PLATFORM_TIMEZONE);
       const metadata = { ...event.rawMetadata,
         imageOriginalStored: Boolean(overviewObjectId), imagePlateStored: Boolean(plateObjectId), imageVehicleStored: Boolean(extraObjectId),
-        directionSource: event.direction ? "CAMERA_EVENT" : direction!=="UNKNOWN" ? "CAMERA_CONFIGURATION" : "UNKNOWN",
+        directionSource: event.sourceDirection ? "CAMERA_EVENT_MAPPED" : event.direction && event.direction !== "UNKNOWN" ? "NORMALIZED_EVENT" : "UNKNOWN",
         receivedAt: new Date().toISOString()
       };
       if(event.rawMetadata?.vehicleTypeStatus && event.rawMetadata.vehicleTypeStatus!=="MAPPED") this.options.logger.warn(JSON.stringify({cameraId:camera.id,processingResult:"VEHICLE_TYPE_NOT_MAPPED",reason:event.rawMetadata.vehicleTypeStatus}));

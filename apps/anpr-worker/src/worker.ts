@@ -75,7 +75,7 @@ export class AnprSupervisor {
       running.controller.abort(); await running.promise; this.running.delete(id); await this.options.repository.markDisabled(id);
     }
     for (const camera of cameras) {
-      const fingerprint = JSON.stringify([camera.rtspHost, camera.rtspUsernameEncrypted, camera.rtspPasswordEncrypted, camera.anprProvider, camera.anprHttpProtocol, camera.anprHttpPort, camera.anprChannel, camera.name, camera.location, camera.direction]);
+      const fingerprint = JSON.stringify([camera.rtspHost, camera.rtspUsernameEncrypted, camera.rtspPasswordEncrypted, camera.anprProvider, camera.anprHttpProtocol, camera.anprHttpPort, camera.anprChannel, camera.name, camera.location, camera.directionMapping]);
       const current = this.running.get(camera.id);
       if (current?.fingerprint === fingerprint) continue;
       if (current) { current.controller.abort(); await current.promise; }

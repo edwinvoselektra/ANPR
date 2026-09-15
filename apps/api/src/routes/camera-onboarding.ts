@@ -20,7 +20,8 @@ const draftBody = z.object({
   rtspHost:z.string().max(253).optional(),rtspUrl:z.string().max(2048).optional(),rtspPort:z.coerce.number().int().min(1).max(65535).default(554),
   rtspPath:z.string().max(1000).default("/cam/realmonitor?channel=1&subtype=0"),username:z.string().max(200).optional(),password:z.string().max(500).optional(),
   rtspEnabled:z.boolean().default(true),anprProvider:z.enum(["DAHUA_ITSAPI","DAHUA_CGI","NONE"]).default("DAHUA_ITSAPI"),
-  direction:z.enum(["INCOMING","OUTGOING","BOTH"]).default("BOTH")
+  direction:z.enum(["INCOMING","OUTGOING","BOTH"]).default("BOTH"),
+  directionMapping:z.enum(["TOWARD_CAMERA_IS_INCOMING","AWAY_FROM_CAMERA_IS_INCOMING"]).default("TOWARD_CAMERA_IS_INCOMING")
 });
 export function receiverOrigin(value: string, cameraHost: string | null) {
   const url = new URL(value);
@@ -48,7 +49,7 @@ export async function onboardingRoutes(app: FastifyInstance) {
     const existing=await prisma.camera.findUnique({where:{draftKey:body.draftKey}});
     if(existing){if(!existing.isDraft||existing.archivedAt||!existing.draftExpiresAt||existing.draftExpiresAt<new Date())return reply.code(409).send({message:"Dit concept is al afgerond of verlopen. Start een nieuwe camera."});return {camera:publicCamera(existing)};}
     const connection=encryptedConnection(body);
-    const camera=await prisma.camera.upsert({where:{draftKey:body.draftKey},update:{},create:{...connection,name:body.name,location:body.location,locationId:body.locationId,direction:body.direction,rtspEnabled:body.rtspEnabled,anprProvider:body.anprProvider,isDraft:true,draftKey:body.draftKey,draftExpiresAt:new Date(Date.now()+7*86_400_000),active:false}});
+    const camera=await prisma.camera.upsert({where:{draftKey:body.draftKey},update:{},create:{...connection,name:body.name,location:body.location,locationId:body.locationId,direction:body.direction,directionMapping:body.directionMapping,rtspEnabled:body.rtspEnabled,anprProvider:body.anprProvider,isDraft:true,draftKey:body.draftKey,draftExpiresAt:new Date(Date.now()+7*86_400_000),active:false}});
     await audit(request,"CAMERA_DRAFT_CREATED",{objectType:"Camera",objectId:camera.id});
     return reply.code(201).send({camera:publicCamera(camera)});
   });

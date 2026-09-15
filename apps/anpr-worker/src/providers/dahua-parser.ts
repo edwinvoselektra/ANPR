@@ -1,5 +1,5 @@
-import type { CameraDirection, VehicleColor, VehicleType } from "@prisma/client";
-import { normalizeLicensePlate, parseCameraTime, resolveTimeZone } from "@anpr/shared";
+import type { VehicleColor, VehicleType } from "@prisma/client";
+import { mapCameraDirection, normalizeLicensePlate, parseCameraTime, resolveTimeZone, type CameraSourceDirection } from "@anpr/shared";
 import type { EventImage, ManagedAnprCamera, NormalizedAnprEvent } from "../types.js";
 
 export type DahuaRawEvent = { fields: Record<string, string>; overviewImage?: EventImage; plateImage?: EventImage; extraImage?: EventImage; imageDiagnostics?: Record<string,string> };
@@ -42,10 +42,10 @@ const types: Record<string, VehicleType> = {
   motorcycle: "MOTORCYCLE", motorbike: "MOTORCYCLE", bus: "BUS", trailer: "TRAILER"
 };
 
-function direction(value?: string): CameraDirection | undefined {
+function sourceDirection(value?: string): CameraSourceDirection | undefined {
   const normalized = value?.toLowerCase();
-  if (["incoming", "approach", "enter", "in"].includes(normalized ?? "")) return "INCOMING";
-  if (["outgoing", "leave", "exit", "out"].includes(normalized ?? "")) return "OUTGOING";
+  if (["incoming", "approach", "enter", "in", "toward", "towards"].includes(normalized ?? "")) return "TOWARD_CAMERA";
+  if (["outgoing", "leave", "exit", "out", "away"].includes(normalized ?? "")) return "AWAY_FROM_CAMERA";
   return undefined;
 }
 
@@ -78,6 +78,8 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
   // with an event position. A real EventID remains the preferred source key.
   const sourceEventId = eventId ?? (groupId && eventPosition ? `${groupId}:${eventPosition}` : undefined);
   const timeZone=resolveTimeZone(camera.vpnLocation?.timezone,process.env.PLATFORM_TIMEZONE);
+  const rawDirection=suffix(raw.fields,["Direction"]);
+  const physicalDirection=sourceDirection(rawDirection);
   const timeField=["RealUTC","UTC","SnapTime","Time"].find(field=>parseCameraTime(suffix(raw.fields,[field]),timeZone));
   return {
     cameraId: camera.id,
@@ -89,7 +91,8 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
     vehicleColor: color ? colors[color.toLowerCase()] ?? "OTHER" : undefined,
     vehicleType: type ? types[type.toLowerCase()] ?? "UNKNOWN" : undefined,
     vehicleBrand: suffix(raw.fields, ["Vehicle.Brand", "TrafficCar.VehicleSign", "VehicleSign", "Brand"]),
-    direction: direction(suffix(raw.fields, ["Direction"])), lane,
+    sourceDirection: physicalDirection,
+    direction: mapCameraDirection(physicalDirection,camera.directionMapping ?? "TOWARD_CAMERA_IS_INCOMING"), lane,
     overviewImage: raw.overviewImage, plateImage: raw.plateImage, extraImage: raw.extraImage,
     source: "DAHUA_CAMERA", sourceEventId,
     rawMetadata: {
@@ -97,7 +100,8 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
       vehicleTypeStatus: !type ? "NOT_RECEIVED" : types[type.toLowerCase()] ? "MAPPED" : "UNMAPPED_VALUE",
       ...(type ? { rawVehicleType: type.slice(0,100) } : {}),
       ...(color ? { rawVehicleColor: color.slice(0,100) } : {}),
-      ...(suffix(raw.fields,["Direction"]) ? { rawDirection: suffix(raw.fields,["Direction"])!.slice(0,100) } : {}),
+      ...(rawDirection ? { rawDirection: rawDirection.slice(0,100) } : {}),
+      ...(physicalDirection ? { sourceDirection: physicalDirection, directionMapping: camera.directionMapping ?? "TOWARD_CAMERA_IS_INCOMING" } : {}),
       timeSource: timeField??"RECEIPT_FALLBACK", timeZone,
       ...(suffix(raw.fields,["UTC"]) && suffix(raw.fields,["RealUTC"]) && Number.isFinite(Number(suffix(raw.fields,["UTC"]))) && Number.isFinite(Number(suffix(raw.fields,["RealUTC"]))) ? { utcDisagreementSeconds: Number(suffix(raw.fields,["UTC"]))-Number(suffix(raw.fields,["RealUTC"])) } : {}),
       imageOriginalStatus: raw.imageDiagnostics?.ORIGINAL ?? (raw.overviewImage ? "RECEIVED_LEGACY" : "NOT_RECEIVED"),

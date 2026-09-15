@@ -430,6 +430,8 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 
 ## Documentatie
 
+- [Camerarichting en fysieke mapping](docs/camera-direction.md)
+
 - [Architectuur](docs/architecture.md)
 - [Resultaat Fase 1](docs/PHASE1-RESULT.md)
 - [Resultaat Fase 2.1](docs/PHASE2.1-RESULT.md)

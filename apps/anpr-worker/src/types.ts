@@ -1,4 +1,5 @@
-import type { CameraDirection, VehicleColor, VehicleType } from "@prisma/client";
+import type { CameraDirection, CameraDirectionMapping, VehicleColor, VehicleType } from "@prisma/client";
+import type { CameraSourceDirection } from "@anpr/shared";
 
 export type ManagedAnprCamera = {
   vpnLocation?: {timezone:string}|null;
@@ -6,6 +7,7 @@ export type ManagedAnprCamera = {
   name: string;
   location: string;
   direction: CameraDirection;
+  directionMapping?: CameraDirectionMapping;
   rtspHost: string | null;
   rtspUsernameEncrypted: string | null;
   rtspPasswordEncrypted: string | null;
@@ -28,6 +30,7 @@ export type NormalizedAnprEvent = {
   vehicleColor?: VehicleColor;
   vehicleBrand?: string;
   direction?: CameraDirection;
+  sourceDirection?: CameraSourceDirection;
   lane?: number;
   overviewImage?: EventImage;
   plateImage?: EventImage;

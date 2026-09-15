@@ -14,6 +14,11 @@ enum CameraDirection {
   BOTH
 }
 
+enum CameraDirectionMapping {
+  TOWARD_CAMERA_IS_INCOMING
+  AWAY_FROM_CAMERA_IS_INCOMING
+}
+
 enum CameraStatus {
   ONLINE
   OFFLINE
@@ -236,6 +241,7 @@ model Camera {
   rtspUsernameEncrypted    String?
   rtspPasswordEncrypted    String?
   direction                CameraDirection
+  directionMapping         CameraDirectionMapping @default(TOWARD_CAMERA_IS_INCOMING)
   status                   CameraStatus         @default(DISABLED)
   lastConnectionAt         DateTime?
   lastConnectionSuccessAt  DateTime?

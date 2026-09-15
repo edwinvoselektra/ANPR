@@ -31,7 +31,7 @@ const dahuaTcp = z.object({
 const zone = z.object({ type: z.enum(["RECTANGLE", "POLYGON"]), points: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2).max(20) });
 const cameraBody = rtspFields.merge(z.object({
   name: z.string().trim().min(2).max(100), location: z.string().trim().min(2).max(150), description: z.string().trim().max(1000).optional(),
-  direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]), latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
+  direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]), directionMapping: z.enum(["TOWARD_CAMERA_IS_INCOMING", "AWAY_FROM_CAMERA_IS_INCOMING"]).default("TOWARD_CAMERA_IS_INCOMING"), latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
   longitude: z.coerce.number().min(-180).max(180).nullable().optional(), active: z.boolean().default(false),
   displayOrder: z.coerce.number().int().min(0).max(10_000).default(0), offlineTimeoutSeconds: z.coerce.number().int().min(30).max(86_400).default(120),
   zone: zone.optional(), anprProvider: z.enum(["NONE", "DAHUA_CGI", "DAHUA_ITSAPI"]).default("NONE"),
@@ -48,7 +48,7 @@ const cameraBody = rtspFields.merge(z.object({
 });
 const updateBody = z.object({
   name: z.string().trim().min(2).max(100).optional(), location: z.string().trim().min(2).max(150).optional(),
-  description: z.string().trim().max(1000).optional(), direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]).optional(),
+  description: z.string().trim().max(1000).optional(), direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]).optional(), directionMapping: z.enum(["TOWARD_CAMERA_IS_INCOMING", "AWAY_FROM_CAMERA_IS_INCOMING"]).optional(),
   latitude: z.coerce.number().min(-90).max(90).nullable().optional(), longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
   active: z.boolean().optional(), displayOrder: z.coerce.number().int().min(0).max(10_000).optional(),
   offlineTimeoutSeconds: z.coerce.number().int().min(30).max(86_400).optional(), zone: zone.optional(),
@@ -110,7 +110,7 @@ export async function cameraRoutes(app: FastifyInstance) {
     await validateLocationLink(body.locationId, body.recorderId);
     const connectionData = body.rtspEnabled || body.anprProvider !== "NONE" ? encryptedConnection({...body,rtspHost:body.rtspHost??body.dahuaTcp?.host,username:body.username??body.dahuaTcp?.username,password:body.password??body.dahuaTcp?.password}) : { connectionMode:"FIELDS" as const,rtspProtocol:"rtsp",rtspHost:null,rtspPort:554,rtspPath:null,rtspUsernameEncrypted:null,rtspPasswordEncrypted:null };
     const camera = await prisma.camera.create({ data: {
-      rtspEnabled: body.rtspEnabled, name: body.name, location: body.location, description: body.description, direction: body.direction,
+      rtspEnabled: body.rtspEnabled, name: body.name, location: body.location, description: body.description, direction: body.direction, directionMapping: body.directionMapping,
       latitude: body.latitude, longitude: body.longitude, active: body.active,
       status: body.active ? "OFFLINE" : "DISABLED", displayOrder: body.displayOrder,
       offlineTimeoutSeconds: body.offlineTimeoutSeconds, ...connectionData,
@@ -159,7 +159,7 @@ export async function cameraRoutes(app: FastifyInstance) {
         await tx.deviceConnection.upsert({where:{cameraId_type:{cameraId:id,type:"DAHUA_TCP_SDK"}},create:{cameraId:id,...data},update:data});
       }
       return tx.camera.update({ where: { id, archivedAt: null }, data: {
-        configVersion: { increment: 1 }, rtspEnabled: body.rtspEnabled, name: body.name, location: body.location, description: body.description, direction: body.direction,
+        configVersion: { increment: 1 }, rtspEnabled: body.rtspEnabled, name: body.name, location: body.location, description: body.description, direction: body.direction, directionMapping: body.directionMapping,
         latitude: body.latitude, longitude: body.longitude, active: current.isDraft ? false : body.active,
         status: body.active === false ? "DISABLED" : body.active === true && current.status === "DISABLED" ? "OFFLINE" : undefined,
         displayOrder: body.displayOrder, offlineTimeoutSeconds: body.offlineTimeoutSeconds,

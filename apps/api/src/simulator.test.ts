@@ -69,7 +69,7 @@ describe("simulator camerakeuze", () => {
     prismaMock.plateGroupMember.findMany.mockResolvedValue([{ active: true, group: { id: GROUP_ID, name: "Aandacht" }, groupId: GROUP_ID, reason: "DEMO: verdacht voertuig" }]);
     app = buildServer();
 
-    const response = await app.inject({ method: "POST", url: "/simulator/passages", payload: { cameraId: CAMERA_ID, licensePlate: "12-ABC-3" } });
+    const response = await app.inject({ method: "POST", url: "/simulator/passages", payload: { cameraId: CAMERA_ID, licensePlate: "12-ABC-3", direction: "INCOMING" } });
 
     expect(response.statusCode).toBe(201);
     expect(response.json().hit).toBe(true);

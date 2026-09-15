@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculatePassageExpiry, displayLicensePlate, normalizeLicensePlate, shouldCreateHit } from "./index";
+import { calculatePassageExpiry, displayLicensePlate, mapCameraDirection, normalizeLicensePlate, shouldCreateHit } from "./index";
 
 describe("kentekennormalisatie", () => {
   it.each(["12-ABC-3", "12 ABC 3", "12ABC3"])("normaliseert %s", (input) => {
@@ -31,5 +31,18 @@ describe("retentie en hitbeslissing", () => {
     expect(shouldCreateHit({ active: true, groupActive: false }, now)).toBe(false);
     expect(shouldCreateHit({ active: true, groupActive: true, validFrom: new Date("2026-01-11") }, now)).toBe(false);
     expect(shouldCreateHit({ active: true, groupActive: true, validUntil: new Date("2026-01-09") }, now)).toBe(false);
+  });
+});
+
+describe("fysieke camerarichting", () => {
+  it("ondersteunt beide montageoriëntaties", () => {
+    expect(mapCameraDirection("TOWARD_CAMERA", "TOWARD_CAMERA_IS_INCOMING")).toBe("INCOMING");
+    expect(mapCameraDirection("AWAY_FROM_CAMERA", "TOWARD_CAMERA_IS_INCOMING")).toBe("OUTGOING");
+    expect(mapCameraDirection("TOWARD_CAMERA", "AWAY_FROM_CAMERA_IS_INCOMING")).toBe("OUTGOING");
+    expect(mapCameraDirection("AWAY_FROM_CAMERA", "AWAY_FROM_CAMERA_IS_INCOMING")).toBe("INCOMING");
+  });
+
+  it("laat ontbrekende bronrichting onbekend", () => {
+    expect(mapCameraDirection(undefined, "TOWARD_CAMERA_IS_INCOMING")).toBe("UNKNOWN");
   });
 });

@@ -7,7 +7,12 @@ import { authenticate, SESSION_COOKIE } from "../lib/auth.js";
 import { hashToken, newSessionToken } from "../lib/crypto.js";
 import { prisma } from "../lib/prisma.js";
 
-const loginSchema = z.object({ identifier: z.string().trim().min(2).max(254), password: z.string().min(1).max(200) });
+const loginSchema = z.object({ identifier: z.string().trim().min(2).max(254), password: z.string().min(1).max(200), remember: z.boolean().default(true) });
+
+export function sessionPolicy(remember: boolean, now = Date.now()) {
+  const expiresAt = new Date(now + (remember ? config.REMEMBER_SESSION_TTL_DAYS * 86_400_000 : config.SESSION_TTL_HOURS * 3_600_000));
+  return { expiresAt, cookieExpiry: remember ? expiresAt : undefined };
+}
 
 export async function authRoutes(app: FastifyInstance) {
   app.post("/auth/login", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
@@ -33,7 +38,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(401).send({ error: "LOGIN_FAILED", message: "Inloggegevens onjuist of account tijdelijk geblokkeerd." });
     }
     const token = newSessionToken();
-    const expiresAt = new Date(Date.now() + config.SESSION_TTL_HOURS * 3_600_000);
+    const { expiresAt, cookieExpiry } = sessionPolicy(body.remember);
     const session = await prisma.$transaction(async (tx) => {
       await tx.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: now } });
       return tx.userSession.create({ data: {
@@ -47,7 +52,8 @@ export async function authRoutes(app: FastifyInstance) {
       sessionId: session.id };
     await audit(request, "AUTH_LOGIN", { objectType: "User", objectId: user.id });
     reply.setCookie(SESSION_COOKIE, token, {
-      path: "/", httpOnly: true, sameSite: "strict", secure: config.NODE_ENV === "production", expires: expiresAt
+      path: "/", httpOnly: true, sameSite: "strict", secure: config.NODE_ENV === "production",
+      ...(cookieExpiry ? { expires: cookieExpiry } : {})
     });
     return { user: request.authUser };
   });
