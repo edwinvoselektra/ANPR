@@ -22,6 +22,7 @@ export async function searchRoutes(app: FastifyInstance) {
       dateFrom: z.string().regex(datePattern).optional(), dateTo: z.string().regex(datePattern).optional(),
       timeFrom: z.string().regex(timePattern).optional(), timeTo: z.string().regex(timePattern).optional(),
       groupId: z.string().uuid().optional(), onlyHits: z.enum(["true", "false"]).default("false"), direction: z.enum(directions).optional(),
+      minAttentionScore: z.coerce.number().int().min(0).max(100).optional(),
       page: z.coerce.number().int().min(1).max(10000).default(1), limit: z.coerce.number().int().min(1).max(100).default(25)
     }).parse(request.query);
     if ((query.timeFrom && !query.timeTo) || (!query.timeFrom && query.timeTo)) return reply.code(400).send({ error: "TIME_RANGE_INCOMPLETE", message: "Vul zowel tijd vanaf als tijd tot in." });
@@ -58,11 +59,12 @@ export async function searchRoutes(app: FastifyInstance) {
       },
       OR: windows,
       hits: hitFilter
+      ,attentionSnapshot: query.minAttentionScore===undefined ? undefined : { score: { gte: query.minAttentionScore } }
     };
     const select = {
       id: true, displayLicensePlate: true, normalizedLicensePlate: true, timestamp: true, timezone: true, location: true,
       direction: true, vehicleColor: true, vehicleType: true, vehicleImage1ObjectId: true,
-      plateImageObjectId: true, isHit: true, source: true, camera: { select: { id: true, name: true, historicalName: true, location: true, vpnLocation: { select: { timezone: true } } } }
+      plateImageObjectId: true, isHit: true, source: true, attentionSnapshot: { select: { id: true, score: true, confidence: true, reasonsJson: true } }, camera: { select: { id: true, name: true, historicalName: true, location: true, vpnLocation: { select: { timezone: true } } } }
     } as const;
     const [passages, total] = await Promise.all([
       prisma.passage.findMany({ where, select, orderBy: [{ timestamp: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit }),

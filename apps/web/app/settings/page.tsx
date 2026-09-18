@@ -17,6 +17,7 @@ type AdminOverview = {
   storageNote: string; timeZone: string;
   activity: Array<{ id: string; createdAt: string; user: string; action: string; object: string; description: string }>;
 };
+type AttentionConfig={active:boolean;minimumPassages:number;analysisWindowDays:number;attentionThreshold:number;editable:boolean};
 
 function fileSize(value: number | null) {
   if (value === null || !Number.isFinite(value)) return "Niet beschikbaar";
@@ -48,6 +49,7 @@ export default function SettingsPage() {
   const [data, setData] = useState<PageData>();
   const [config, setConfig] = useState<PushConfig>();
   const [adminOverview, setAdminOverview] = useState<AdminOverview>();
+  const [attentionConfig, setAttentionConfig] = useState<AttentionConfig>();
   const [adminError, setAdminError] = useState("");
   const [preference, setPreference] = useState<Preferences>({ pushEnabled: false, allHitGroups: true, groupIds: [] });
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">("default");
@@ -60,13 +62,14 @@ export default function SettingsPage() {
       const overviewRequest = admin
         ? api<AdminOverview>("/admin/overview", { cache: "no-store" }).catch(() => { setAdminError("Beheerinformatie is tijdelijk niet beschikbaar."); return undefined; })
         : Promise.resolve(undefined);
-      const [preferences, configuration, overview] = await Promise.all([
+      const attentionConfigRequest = admin ? api<AttentionConfig>("/attention/config", { cache: "no-store" }).catch(() => undefined) : Promise.resolve(undefined);
+      const [preferences, configuration, overview, patternConfig] = await Promise.all([
         api<PageData>("/notifications/preferences", { cache: "no-store" }),
         api<PushConfig>("/notifications/config", { cache: "no-store" }),
-        overviewRequest
+        overviewRequest, attentionConfigRequest
       ]);
       setData(preferences); setPreference(preferences.preference); setConfig(configuration);
-      setAdminOverview(overview); if (overview) setAdminError("");
+      setAdminOverview(overview); setAttentionConfig(patternConfig); if (overview) setAdminError("");
       setPermission("Notification" in window && "serviceWorker" in navigator && "PushManager" in window ? Notification.permission : "unsupported");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Meldingsinstellingen ophalen mislukt.");
@@ -162,6 +165,12 @@ export default function SettingsPage() {
           <div><dt>Opslag</dt><dd>{fileSize(adminOverview.storage.storageBytes)}</dd></div>
           <div className="total"><dt>Totaal</dt><dd>{fileSize(adminOverview.storage.totalBytes)}</dd></div>
         </dl><p className="subtitle">{adminOverview.storageNote}</p></> : <div className="empty">{adminError || "Systeemopslag laden…"}</div>}
+      </section>}
+
+      {admin && <section className="card">
+        <h2>Patroonanalyse</h2>
+        {attentionConfig ? <div className="status-list"><div className="status-row"><div><strong>Analyse actief</strong><small>Nieuwe passages worden asynchroon geanalyseerd.</small></div><span className="badge green">{attentionConfig.active ? "Aan" : "Uit"}</span></div><div className="status-row"><div><strong>Minimaal aantal passages</strong></div><strong>{attentionConfig.minimumPassages}</strong></div><div className="status-row"><div><strong>Analysevenster</strong></div><strong>{attentionConfig.analysisWindowDays} dagen</strong></div><div className="status-row"><div><strong>Drempel herhaald patroon</strong></div><strong>{attentionConfig.attentionThreshold}%</strong></div></div> : <div className="empty">Patroonanalyse-instellingen laden…</div>}
+        <p className="subtitle">Deze eerste versie gebruikt vaste, uitlegbare engine-instellingen. Wijzigen via de interface is nog niet beschikbaar.</p>
       </section>}
 
       {admin && <section className="card">

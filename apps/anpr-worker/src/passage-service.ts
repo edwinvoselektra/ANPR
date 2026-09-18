@@ -75,6 +75,7 @@ export class PassageService {
             confidence: event.confidence ?? 0, frameObjectId: plateObjectId
           } }
         } });
+        await tx.attentionAnalysisJob.create({data:{passageId:created.id}});
         await detectAndCreateHit(tx, {
           passageId: created.id, cameraId: camera.id, normalizedLicensePlate: event.normalizedPlate,
           location: camera.location, timestamp: event.occurredAt, direction, source: event.source,

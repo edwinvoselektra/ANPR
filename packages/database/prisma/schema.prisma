@@ -98,6 +98,26 @@ enum NotificationStatus {
   SKIPPED
 }
 
+enum AttentionConfidence {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AttentionAnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PatternReviewLabel {
+  NORMAL
+  ATTENTION
+  SUSPICIOUS_PATTERN
+  INSUFFICIENT_INFO
+}
+
 enum LocationRouterType {
   TP_LINK_OMADA_ER605
   MANUAL_OTHER
@@ -159,6 +179,7 @@ model User {
   pushSubscriptions  PushSubscription[]
   notificationPreference NotificationPreference?
   notifications      Notification[]
+  patternReviews     PatternReview[]
 }
 
 model Role {
@@ -416,8 +437,11 @@ model Passage {
   plateDetections        PlateDetection[]
   hits                   Hit[]
   retentionExceptions   RetentionException[]
+  attentionSnapshot     AttentionSnapshot?
+  attentionAnalysisJob  AttentionAnalysisJob?
 
   @@index([normalizedLicensePlate])
+  @@index([normalizedLicensePlate, timestamp])
   @@index([timestamp])
   @@index([cameraId, timestamp])
   @@index([vehicleColor])
@@ -427,6 +451,55 @@ model Passage {
   @@index([direction, timestamp])
   @@index([expiresAt])
   @@unique([cameraId, source, sourceEventId])
+}
+
+model AttentionSnapshot {
+  id                     String              @id @default(uuid()) @db.Uuid
+  passageId              String              @unique @db.Uuid
+  normalizedLicensePlate String
+  score                  Int
+  confidence             AttentionConfidence
+  factorsJson            Json
+  reasonsJson            Json
+  calculatedAt           DateTime            @default(now())
+  windowStart            DateTime
+  windowEnd              DateTime
+  expiresAt              DateTime
+  passage                Passage             @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  review                 PatternReview?
+
+  @@index([normalizedLicensePlate, calculatedAt])
+  @@index([expiresAt])
+}
+
+model AttentionAnalysisJob {
+  id          String                  @id @default(uuid()) @db.Uuid
+  passageId   String                  @unique @db.Uuid
+  status      AttentionAnalysisStatus @default(PENDING)
+  attempts    Int                     @default(0)
+  availableAt DateTime                @default(now())
+  lockedAt    DateTime?
+  lastError   String?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  passage     Passage                 @relation(fields: [passageId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+}
+
+model PatternReview {
+  id          String             @id @default(uuid()) @db.Uuid
+  snapshotId  String             @unique @db.Uuid
+  reviewLabel PatternReviewLabel
+  reviewedById String            @db.Uuid
+  reviewedAt  DateTime           @default(now())
+  reviewNote  String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  snapshot    AttentionSnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  reviewedBy  User               @relation(fields: [reviewedById], references: [id], onDelete: Restrict)
+
+  @@index([reviewedById, reviewedAt])
 }
 
 model Vehicle {

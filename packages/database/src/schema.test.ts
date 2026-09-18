@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const schema = readFileSync(resolve(process.cwd(), "prisma/schema.prisma"), "utf8");
+const attentionMigration = readFileSync(resolve(process.cwd(), "prisma/migrations/20260918000100_attention_analysis/migration.sql"), "utf8");
 
 describe("Prisma-datamodel", () => {
   it.each(["User", "Role", "Permission", "UserSession", "Camera", "CameraZone", "VpnLocation", "Recorder", "DeviceConnection", "Passage", "Vehicle", "PlateDetection", "PlateGroup", "PlateGroupMember", "Hit", "HitGroup", "Notification", "PushSubscription", "NotificationPreference", "NotificationPreferenceGroup", "AuditLog", "SystemSetting", "RetentionException"])("bevat model %s", (model) => {
@@ -32,6 +33,16 @@ describe("Prisma-datamodel", () => {
     expect(schema).toMatch(/model DeviceConnection \{[\s\S]*?port\s+Int\s+@default\(37777\)/);
     expect(schema).toMatch(/@@unique\(\[cameraId, type\]\)/);
     expect(schema).toMatch(/@@unique\(\[recorderId, type\]\)/);
+  });
+  it("bewaart aandachtsscores, duurzame analysetaken en menselijke reviews met bronretentie",()=>{
+    expect(schema).toContain("model AttentionSnapshot {");
+    expect(schema).toContain("model AttentionAnalysisJob {");
+    expect(schema).toContain("model PatternReview {");
+    expect(schema).toMatch(/model AttentionSnapshot \{[\s\S]*?passage\s+Passage\s+@relation\([^\n]*onDelete: Cascade\)/);
+    expect(schema).toMatch(/model AttentionAnalysisJob \{[\s\S]*?@@index\(\[status, availableAt\]\)/);
+    expect(schema).toMatch(/model PatternReview \{[\s\S]*?reviewedBy\s+User\s+@relation\([^\n]*onDelete: Restrict\)/);
+    expect(schema).toContain("@@index([normalizedLicensePlate, timestamp])");
+    expect(attentionMigration).toContain('CHECK ("score" >= 0 AND "score" <= 100)');
   });
   it("bewaart één hit per passage met meerdere gekoppelde groepen", () => {
     expect(schema).toMatch(/model Hit \{[\s\S]*?@@unique\(\[passageId\]\)/);

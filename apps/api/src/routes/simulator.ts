@@ -50,6 +50,7 @@ export async function simulatorRoutes(app: FastifyInstance) {
         vehicle: { create: { type: body.vehicleType, color: body.vehicleColor, confidence: 0.95, metadata: { demo: true } } },
         plateDetections: { create: { rawLicensePlate: body.licensePlate, normalizedLicensePlate: normalized, confidence: 0.98 } }
       }});
+      await tx.attentionAnalysisJob.create({data:{passageId:created.id}});
       const hit = await detectAndCreateHit(tx, {
         passageId: created.id, cameraId: camera.id, normalizedLicensePlate: normalized,
         location: camera.location, timestamp, direction, source: "DEMO", sendPush: body.sendPush

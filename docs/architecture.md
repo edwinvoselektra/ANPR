@@ -277,6 +277,10 @@ indexes ondersteunen tijdgebaseerde cleanup en latere partitionering.
 - PWA/Web Push/meldkamer (Fase 4);
 - volledige retentiejobs, back-ups, monitoring en performancebeheer (Fase 5).
 
+De backend voor transparante patroonanalyse is inmiddels toegevoegd. Zie
+[Aandachtsscore en patroonanalyse](attention-analysis.md). De bijbehorende uitgebreide
+gebruikersinterface blijft een afzonderlijke vervolgstap.
+
 Deze onderdelen hebben datamodellen of interfaces waar dat migratierisico vermindert,
 maar worden in Fase 1 niet als werkende functionaliteit aangeboden.
 

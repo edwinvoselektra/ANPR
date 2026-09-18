@@ -10,6 +10,7 @@ const prismaMock = vi.hoisted(() => ({
   hit: { create: vi.fn() },
   plateGroupMember: { findMany: vi.fn() },
   auditLog: { create: vi.fn() },
+  attentionAnalysisJob: { create: vi.fn() },
   $transaction: vi.fn()
 }));
 
@@ -42,7 +43,7 @@ beforeEach(() => {
   prismaMock.camera.findUnique.mockResolvedValue(camera);
   prismaMock.plateGroupMember.findMany.mockResolvedValue([]);
   prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn({
-    passage: prismaMock.passage, hit: prismaMock.hit, plateGroupMember: prismaMock.plateGroupMember, camera: { update: prismaMock.camera.update }
+    passage: prismaMock.passage, hit: prismaMock.hit, plateGroupMember: prismaMock.plateGroupMember, camera: { update: prismaMock.camera.update }, attentionAnalysisJob: prismaMock.attentionAnalysisJob
   }));
   prismaMock.passage.create.mockResolvedValue(passageRecord);
   prismaMock.passage.update.mockResolvedValue({ ...passageRecord, isHit: true });

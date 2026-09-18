@@ -17,6 +17,7 @@ const items: readonly NavigationItem[] = [
   { href: "/hits", icon: "hit", label: "Hits", permission: PERMISSIONS.HITS_VIEW },
   { href: "/search", icon: "search", label: "Zoeken", permission: PERMISSIONS.PASSAGES_VIEW },
   { href: "/plates", icon: "plate", label: "Kentekens", permission: PERMISSIONS.PASSAGES_VIEW },
+  { href: "/patterns", icon: "search", label: "Opvallende patronen", permission: PERMISSIONS.PASSAGES_VIEW },
   { href: "/groups", icon: "groups", label: "Groepen", permission: PERMISSIONS.PASSAGES_VIEW },
   { href: "/cameras", icon: "camera", label: "Camera’s" },
   { href: "/locations", icon: "location", label: "Locaties", permission: PERMISSIONS.LOCATIONS_VIEW },

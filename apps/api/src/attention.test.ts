@@ -1,0 +1,21 @@
+import Fastify,{type FastifyInstance}from"fastify";
+import{afterEach,beforeEach,describe,expect,it,vi}from"vitest";
+
+const authState=vi.hoisted(()=>({admin:true}));
+const prismaMock=vi.hoisted(()=>({attentionSnapshot:{findFirst:vi.fn(),findMany:vi.fn(),findFirstOrThrow:vi.fn()},patternReview:{upsert:vi.fn()},auditLog:{create:vi.fn()}}));
+vi.mock("./lib/prisma.js",()=>({prisma:prismaMock}));
+vi.mock("./lib/auth.js",()=>({requirePermission:()=>async()=>undefined,requireAdmin:()=>async(request:any,reply:any)=>{if(!authState.admin)return reply.code(403).send({error:"ADMIN_REQUIRED"});request.authUser={id:"11111111-1111-4111-8111-111111111111"}}}));
+import{attentionRoutes}from"./routes/attention.js";
+
+const snapshot={id:"22222222-2222-4222-8222-222222222222",passageId:"33333333-3333-4333-8333-333333333333",normalizedLicensePlate:"12ABC3",score:67,confidence:"HIGH",factorsJson:{time:{score:80}},reasonsJson:["Het tijdstip wijkt af."],calculatedAt:new Date("2026-09-18T10:00:00Z"),windowStart:new Date("2026-06-20T10:00:00Z"),windowEnd:new Date("2026-09-18T10:00:00Z"),review:null};
+let app:FastifyInstance|undefined;
+beforeEach(async()=>{vi.clearAllMocks();authState.admin=true;prismaMock.attentionSnapshot.findFirst.mockResolvedValue(snapshot);prismaMock.attentionSnapshot.findMany.mockResolvedValue([snapshot]);prismaMock.attentionSnapshot.findFirstOrThrow.mockResolvedValue(snapshot);prismaMock.patternReview.upsert.mockResolvedValue({reviewLabel:"ATTENTION",reviewedAt:new Date("2026-09-18T11:00:00Z"),reviewNote:"Menselijk controleren"});app=Fastify();await app.register(attentionRoutes);await app.ready()});
+afterEach(async()=>{await app?.close();app=undefined});
+
+describe("aandachtsscore API",()=>{
+  it("geeft huidige score met uitleg maar zonder interne JSON-veldnamen",async()=>{const response=await app!.inject({url:"/attention/12-abc-3"});expect(response.statusCode).toBe(200);expect(response.json().attention).toMatchObject({score:67,confidence:"HIGH",status:"SCORED",factors:{time:{score:80}},reasons:["Het tijdstip wijkt af."]});expect(response.body).not.toContain("factorsJson")});
+  it("begrensd de scorehistorie",async()=>{await app!.inject({url:"/attention/12ABC3/history?limit=10"});expect(prismaMock.attentionSnapshot.findMany).toHaveBeenCalledWith(expect.objectContaining({take:10,orderBy:[{windowEnd:"desc"},{id:"desc"}]}))});
+  it("weigert review door een niet-admin",async()=>{authState.admin=false;const response=await app!.inject({method:"PUT",url:`/attention/${snapshot.id}/review`,payload:{reviewLabel:"ATTENTION"}});expect(response.statusCode).toBe(403);expect(prismaMock.patternReview.upsert).not.toHaveBeenCalled()});
+  it("slaat review op en audit alleen labelmetadata",async()=>{const response=await app!.inject({method:"PUT",url:`/attention/${snapshot.id}/review`,payload:{reviewLabel:"ATTENTION",reviewNote:"Menselijk controleren"}});expect(response.statusCode).toBe(200);expect(prismaMock.patternReview.upsert).toHaveBeenCalled();expect(prismaMock.auditLog.create).toHaveBeenCalledWith({data:expect.objectContaining({action:"PATTERN_REVIEW_CREATED",objectType:"AttentionSnapshot"})})});
+  it("geeft patronen server-side gesorteerd en begrensd terug",async()=>{prismaMock.attentionSnapshot.findMany.mockResolvedValue([{id:snapshot.id,normalizedLicensePlate:"12ABC3",score:82,confidence:"HIGH",reasonsJson:["Afwijkend tijdstip"],calculatedAt:snapshot.calculatedAt,windowEnd:snapshot.windowEnd,passage:{displayLicensePlate:"12-ABC-3",timestamp:snapshot.windowEnd,timezone:"Europe/Amsterdam",location:"Uddel",camera:{id:"44444444-4444-4444-8444-444444444444",name:"Hal",historicalName:null,vpnLocation:{timezone:"Europe/Amsterdam"}}}}]);const response=await app!.inject({url:"/attention/patterns?minScore=70&limit=10"});expect(response.statusCode).toBe(200);expect(response.json().patterns[0]).toMatchObject({score:82,displayLicensePlate:"12-ABC-3",location:"Uddel"});expect(prismaMock.attentionSnapshot.findMany).toHaveBeenCalledWith(expect.objectContaining({take:200,where:expect.objectContaining({score:{gte:70}})}))});
+});

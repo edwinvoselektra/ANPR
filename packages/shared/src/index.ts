@@ -61,3 +61,4 @@ export function normalizeCameraHost(value: string): string {
 }
 
 export * from "./presentation.js";
+export * from "./attention-score.js";

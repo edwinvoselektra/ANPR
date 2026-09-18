@@ -14,6 +14,7 @@ const hitInclude = {
     timestamp: true, timezone: true, location: true, direction: true, source: true, plateConfidence: true,
     vehicleColor: true, vehicleType: true, vehicleBrand: true,
     vehicleImage1ObjectId: true, vehicleImage2ObjectId: true, plateImageObjectId: true, rawEventMetadata: true, createdAt: true
+    , attentionSnapshot: { select: { id: true, score: true, confidence: true, reasonsJson: true } }
   } }
 } as const;
 

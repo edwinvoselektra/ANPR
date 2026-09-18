@@ -66,6 +66,7 @@ describe("compact administratoroverzicht", () => {
       if (path === "/notifications/preferences" && !options?.method) return Promise.resolve(preferences);
       if (path === "/notifications/config") return Promise.resolve({ configured: true, message: "Web Push is geconfigureerd." });
       if (path === "/admin/overview") return Promise.resolve(overview);
+      if (path === "/attention/config") return Promise.resolve({ active: true, minimumPassages: 5, analysisWindowDays: 90, attentionThreshold: 25, editable: false });
       throw new Error(`Onverwachte API-aanroep: ${path}`);
     });
     render(<SettingsPage/>);

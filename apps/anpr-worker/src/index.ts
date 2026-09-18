@@ -8,6 +8,7 @@ import { createCameraRepository } from "./repository.js";
 import { LocalStorageProvider } from "./storage.js";
 import type { ProviderLogger } from "./types.js";
 import { AnprSupervisor } from "./worker.js";
+import { AttentionAnalysisService, startAttentionAnalysis } from "./attention-analysis.js";
 
 const prisma = new PrismaClient();
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: 1, connectTimeout: 2_000, enableOfflineQueue: false });
@@ -25,6 +26,8 @@ const supervisor = new AnprSupervisor({
   repository, providers: new Map([[dahua.kind, dahua]]), onEvent: async (event) => { await passages.store(event); },
   minRetryMs: config.ANPR_RECONNECT_MIN_SECONDS * 1_000, maxRetryMs: config.ANPR_RECONNECT_MAX_SECONDS * 1_000, logger
 });
+const attentionAnalysis=new AttentionAnalysisService({prisma,logger});
+const stopAttentionAnalysis=startAttentionAnalysis(attentionAnalysis,logger);
 let lastDatabaseRefreshAt: string | undefined;
 let reconciling = false;
 let shuttingDown = false;
@@ -53,6 +56,7 @@ logger.info("[anprWorker] started");
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true; clearInterval(refreshTimer); clearInterval(heartbeatTimer);
+  stopAttentionAnalysis();
   await supervisor.stop(); await new Promise<void>((resolve) => healthServer.close(() => resolve()));
   redis.disconnect(); await prisma.$disconnect();
 }

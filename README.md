@@ -431,6 +431,7 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 ## Documentatie
 
 - [Camerarichting en fysieke mapping](docs/camera-direction.md)
+- [Aandachtsscore en patroonanalyse](docs/attention-analysis.md)
 
 - [Architectuur](docs/architecture.md)
 - [Resultaat Fase 1](docs/PHASE1-RESULT.md)

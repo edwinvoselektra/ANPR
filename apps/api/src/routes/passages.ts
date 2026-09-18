@@ -14,6 +14,7 @@ const publicSelect = {
   plateConfidence: true, plateCountry: true, timestamp: true, timezone: true, location: true, direction: true,
   vehicleColor: true, vehicleType: true, vehicleConfidence: true, vehicleBrand: true, lane: true,
   vehicleImage1ObjectId: true, vehicleImage2ObjectId: true, plateImageObjectId: true, isHit: true, status: true, source: true,
+  attentionSnapshot: { select: { id: true, score: true, confidence: true, reasonsJson: true } },
   camera: { select: { id: true, name: true, historicalName: true, location: true, vpnLocation: { select: { timezone: true } } } }
 } as const;
 
