@@ -1,14 +1,16 @@
 # Architectuur ANPR-platform
 
-Status: Fase 1 vastgesteld; aangevuld met Fase 2.1 RTSP/video-worker en het ontwerp voor Fase 2.2 Dahua ANPR-eventinname.
+Status: bijgewerkt tot en met patroonanalyse, mobiele tijd/richting en de externe
+HTTPS-testopzet van september 2026. Historische fase-resultaten blijven afzonderlijk
+in `docs/PHASE*-RESULT.md` bewaard.
 
 ## 1. Doel en afbakening
 
-Fase 1 levert een lokaal, container-first platform met veilige authenticatie, modulair
-rechtenbeheer, gebruikersbeheer, een dashboard, camerabeheer, een bruikbare
-camerawizard, echte server-side RTSP/FFmpeg-verbindingstests, een expliciet gemarkeerde
-demo/simulator en basis-healthchecks. Echte voertuigdetectie en ANPR zijn **niet** actief
-in Fase 1 en worden nergens als werkend gepresenteerd.
+Het huidige platform is container-first en bevat veilige authenticatie, modulair
+rechtenbeheer, gebruikers- en camerabeheer, RTSP/FFmpeg-diagnose, een video-worker,
+Dahua CGI-eventinname via een afzonderlijke ANPR-worker, passages, hits, Web Push en
+patroonanalyse. De simulator blijft expliciet DEMO. De ITSAPI-ontvanger is diagnostisch;
+live browservideo en server-OCR worden nergens als werkend gepresenteerd.
 
 De eerste installatie is bedoeld voor drie camera's en 5–10 gebruikers. De grenzen
 tussen web, API, database, queue, video en ANPR blijven zo dat later afzonderlijke
@@ -19,6 +21,7 @@ workers en meerdere instanties toegevoegd kunnen worden.
 ```text
 apps/
   api/                 Node.js/TypeScript REST API
+  anpr-worker/         Dahua-eventinname, passages en patroonanalyse
   video-worker/        Afzonderlijke RTSP/frame-sampling worker
   web/                 Next.js/React/TypeScript webinterface
 packages/
@@ -44,14 +47,16 @@ dit intern door naar de API-container. Hierdoor blijven sessiecookies first-part
 geen brede CORS-configuratie nodig. Serverstatus en formulieren geven echte API-status
 weer; nog niet gebouwde menuonderdelen zijn zichtbaar gemarkeerd als toekomstige fase.
 
-Fase 1-pagina's:
+Belangrijkste pagina's:
 
 - dashboard;
 - cameraoverzicht en cameradetails;
 - camerawizard met algemene gegevens, verbinding, zone, optionele ANPR-provider en bevestiging;
 - gebruikersbeheer voor administrators;
 - demo/simulator;
-- systeemstatus.
+- systeemstatus en instellingen;
+- live passages, hits, zoeken, kentekens en groepen;
+- locaties/VPN en opvallende patronen.
 
 ## 4. Backendarchitectuur
 
@@ -68,7 +73,10 @@ De API-groepen zijn:
 - `/cameras` voor CRUD, activeren, verbindingstest en snapshots;
 - `/dashboard` voor werkelijke samenvattingen;
 - `/simulator` voor expliciete demo-passages;
-- `/system` voor beperkte statusinformatie.
+- `/passages`, `/hits`, `/plates`, `/plate-groups` en `/search` voor observaties en beheer;
+- `/locations` en `/device-connections` voor VPN- en apparaatdiagnose;
+- `/attention` voor score, historie, review en opvallende patronen;
+- `/admin/overview` voor het beperkte ADMIN-overzicht.
 
 API-antwoorden van camera's bevatten nooit decryptiesleutels, wachtwoorden of een
 volledige RTSP-URL met credentials.
@@ -269,20 +277,20 @@ indexes ondersteunen tijdgebaseerde cleanup en latere partitionering.
 8. TypeScript, lint, tests, Prisma, Compose/build en runtimecontrole.
 9. README en gecontroleerd Fase 1-resultaat.
 
-## 18. Bewuste TODO's na Fase 1
+## 18. Bewuste open punten
 
 - tracking, slimme frame-selectie en server-OCR-provider (latere Fase 2-stap);
 - live HLS/WebRTC; de passagelijst gebruikt nu betrouwbare korte polling;
-- hit-, zoek-, groep- en dossierworkflows (gerealiseerd in Fase 3);
-- PWA/Web Push/meldkamer (Fase 4);
+- een volledige ITSAPI V1.19-parser en ACK pas na echt protocolbewijs;
+- meldkamerfuncties buiten de bestaande hits, push en patroonanalyse;
 - volledige retentiejobs, back-ups, monitoring en performancebeheer (Fase 5).
 
-De backend voor transparante patroonanalyse is inmiddels toegevoegd. Zie
-[Aandachtsscore en patroonanalyse](attention-analysis.md). De bijbehorende uitgebreide
-gebruikersinterface blijft een afzonderlijke vervolgstap.
+De transparante patroonanalyse inclusief dossierkaart, historie, review, zoekfilter,
+pagina Opvallende patronen en simulator-scenario's is actief. Zie
+[Aandachtsscore en patroonanalyse](attention-analysis.md).
 
-Deze onderdelen hebben datamodellen of interfaces waar dat migratierisico vermindert,
-maar worden in Fase 1 niet als werkende functionaliteit aangeboden.
+Voor deze open punten blijven bestaande datamodellen en providerinterfaces behouden
+waar die toekomstige migraties beperken. De interface presenteert ze niet als werkend.
 
 ## 19. Fase 2.1 — video-worker en RTSP-basis
 
@@ -523,8 +531,9 @@ met `Promise.allSettled`, zodat één storing de rest niet blokkeert.
 Camera's behouden hun bestaande RTSP-configuratie. Een additief `DeviceConnection`-record
 kan daarnaast aan precies één camera of recorder toebehoren. Hierdoor is een hybride
 configuratie mogelijk: Dahua TCP voor apparaatinfo, events en kanalen, en RTSP voor het
-videobeeld. De applicatielaag gebruikt `DeviceConnectionProvider`, met afzonderlijke
-`RtspProvider` en `DahuaTcpProvider` implementaties.
+videobeeld. De generieke apparaattransportgrens is `DeviceConnectionProvider`; de
+huidige implementatie is `DahuaTcpProvider`. RTSP-diagnose en framecapture blijven in
+hun bestaande, afzonderlijke camera- en video-workerlagen.
 
 ```text
 Dahua NVR
@@ -563,3 +572,17 @@ Livebeelden blijven op verzoek buiten deze fase. De bestaande video-worker blijf
 `GET /admin/overview` gebruikt de strikte ADMIN-rolcontrole. Programma meet de bestanden die in de draaiende API-container zichtbaar zijn, inclusief haar dependencies en build. Opslag telt de huidige PostgreSQL-database en het gedeelde mediavolume op. Docker-image­lagen, andere containerlagen en Docker-logs zijn niet in de API-container beschikbaar en worden daarom niet geschat. Een niet meetbare categorie en daarmee het totaal wordt als `null`/“Niet beschikbaar” weergegeven.
 
 Dezelfde endpoint selecteert de laatste twintig `AuditLog`-regels op `createdAt DESC, id DESC`. Alleen ID, UTC-tijdstip, actor, vertaald actielabel, afgeleid objectlabel en een korte omschrijving verlaten de API. `oldValue`, `newValue`, `metadata`, IP-adres en alle mogelijke secrets blijven server-side. De UI formatteert het tijdstip centraal in `PLATFORM_TIMEZONE`. Bestaande logging dekt authenticatie, gebruikers/rollen, camera’s, locaties/VPN, kentekens, groepen, pushinstellingen en bestaande passage-acties; de pagina maakt geen nieuwe auditkopieën.
+
+## Patroonanalyse en onderhoudsgrenzen (18 september 2026)
+
+Na iedere opgeslagen passage maakt dezelfde transactie een begrensde
+`AttentionAnalysisJob`. De ANPR-worker verwerkt deze jobs asynchroon en schrijft één
+`AttentionSnapshot` per passage. API en web lezen score, confidence en redenen; de
+frontend berekent geen eigen score. Reviews zijn gekoppeld aan de snapshot en vereisen
+de bestaande ADMIN-controle. Verlopen snapshots volgen de passage-retentie.
+
+Een conservatieve codebase-audit verwijderde uitsluitend statisch aantoonbaar dode
+helpers. Historische migrations, fase-resultaten, demo-seed, rooktests, providergrenzen
+en ongebruikte datamodellen met mogelijk bestaande data blijven behouden. Frequente
+frontendpolling werkt de sessieactiviteit hoogstens eens per vijf minuten bij, zodat
+`lastSeenAt` bruikbaar blijft zonder iedere poll als database-write uit te voeren.

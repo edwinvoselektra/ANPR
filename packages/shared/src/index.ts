@@ -45,10 +45,6 @@ export function calculatePassageExpiry(timestamp: Date, retentionDays = 14): Dat
   return new Date(timestamp.getTime() + retentionDays * 86_400_000);
 }
 
-export function shouldCreateHit(member: { active: boolean; groupActive: boolean; validFrom?: Date | null; validUntil?: Date | null }, now = new Date()): boolean {
-  return member.active && member.groupActive && (!member.validFrom || member.validFrom <= now) && (!member.validUntil || member.validUntil >= now);
-}
-
 /** Accept a bare host or a camera URL without credentials, paths or query. */
 export function normalizeCameraHost(value: string): string {
   const input = value.trim();

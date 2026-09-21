@@ -1,4 +1,4 @@
-const CACHE_VERSION = "anpr-pwa-v1";
+const CACHE_VERSION = "anpr-pwa-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -9,8 +9,8 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
-// Beveiligde API- en paginadata worden bewust niet offline gecachet.
-self.addEventListener("fetch", () => undefined);
+// Er is bewust geen fetch-handler: pagina's en /api/* gaan altijd rechtstreeks naar
+// het netwerk en beveiligde sessie- of gebruikersantwoorden belanden niet in een cache.
 
 self.addEventListener("push", (event) => {
   let message = { title: "ANPR Platform", body: "Er is een nieuwe melding.", data: { url: "/hits" } };

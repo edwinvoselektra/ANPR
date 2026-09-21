@@ -14,6 +14,16 @@ export function sessionPolicy(remember: boolean, now = Date.now()) {
   return { expiresAt, cookieExpiry: remember ? expiresAt : undefined };
 }
 
+export function sessionCookieOptions(cookieExpiry: Date | undefined, nodeEnv = config.NODE_ENV) {
+  return {
+    path: "/",
+    httpOnly: true,
+    sameSite: "strict" as const,
+    secure: nodeEnv === "production",
+    ...(cookieExpiry ? { expires: cookieExpiry } : {})
+  };
+}
+
 export async function authRoutes(app: FastifyInstance) {
   app.post("/auth/login", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
     const body = loginSchema.parse(request.body);
@@ -51,10 +61,7 @@ export async function authRoutes(app: FastifyInstance) {
       permissions: [...new Set(user.roles.flatMap(({ role }) => role.permissions.map(({ permission }) => permission.key)))],
       sessionId: session.id };
     await audit(request, "AUTH_LOGIN", { objectType: "User", objectId: user.id });
-    reply.setCookie(SESSION_COOKIE, token, {
-      path: "/", httpOnly: true, sameSite: "strict", secure: config.NODE_ENV === "production",
-      ...(cookieExpiry ? { expires: cookieExpiry } : {})
-    });
+    reply.setCookie(SESSION_COOKIE, token, sessionCookieOptions(cookieExpiry));
     return { user: request.authUser };
   });
 

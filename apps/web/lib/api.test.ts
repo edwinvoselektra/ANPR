@@ -23,6 +23,19 @@ describe("API-fout", () => {
     expect(options.body).toBeUndefined();
   });
 
+  it("gebruikt voor LAN en mobiel altijd de same-origin API-proxy", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ user: {} }), {
+      status: 200, headers: { "Content-Type": "application/json" }
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api("/auth/me");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/auth/me");
+    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("localhost");
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ credentials: "include" }));
+  });
+
   it("stuurt voor een JSON-body wel het juiste content-type mee", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);

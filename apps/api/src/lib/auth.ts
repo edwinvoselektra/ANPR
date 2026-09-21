@@ -3,6 +3,7 @@ import { hashToken } from "./crypto.js";
 import { prisma } from "./prisma.js";
 
 export const SESSION_COOKIE = "anpr_session";
+const LAST_SEEN_WRITE_INTERVAL_MS = 5 * 60_000;
 
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   const token = request.cookies[SESSION_COOKIE];
@@ -21,7 +22,10 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     id: session.user.id, email: session.user.email, username: session.user.username,
     displayName: session.user.displayName, roles, permissions, sessionId: session.id
   };
-  void prisma.userSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
+  const now = Date.now();
+  if (session.lastSeenAt.getTime() <= now - LAST_SEEN_WRITE_INTERVAL_MS) {
+    void prisma.userSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date(now) } }).catch(() => undefined);
+  }
 }
 
 export function isAuthorized(userPermissions: readonly string[] | undefined, permission: string, roles: readonly string[] = []): boolean {

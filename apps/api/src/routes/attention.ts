@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ATTENTION_SCORE_CONFIG, normalizeLicensePlate, PERMISSIONS } from "@anpr/shared";
 import { audit } from "../lib/audit.js";
+import { selectAndSortAttentionPatterns } from "../lib/attention-patterns.js";
 import { requireAdmin, requirePermission } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 
@@ -17,12 +18,12 @@ export async function attentionRoutes(app:FastifyInstance){
   app.get("/attention/config",{preHandler:requireAdmin()},async()=>({active:true,minimumPassages:ATTENTION_SCORE_CONFIG.minimumHistory,analysisWindowDays:ATTENTION_SCORE_CONFIG.windowDays,attentionThreshold:ATTENTION_SCORE_CONFIG.repeatedAnomalyThreshold,editable:false}));
 
   app.get("/attention/patterns",{preHandler:requirePermission(PERMISSIONS.PASSAGES_VIEW)},async(request,reply)=>{
-    const query=z.object({minScore:z.coerce.number().int().min(0).max(100).default(0),confidence:z.enum(["LOW","MEDIUM","HIGH"]).optional(),dateFrom:z.coerce.date().optional(),dateTo:z.coerce.date().optional(),cameraId:z.string().uuid().optional(),location:z.string().trim().max(120).optional(),limit:z.coerce.number().int().min(1).max(100).default(50)}).parse(request.query);
-    const snapshots=await prisma.attentionSnapshot.findMany({where:{expiresAt:{gt:new Date()},score:{gte:query.minScore},confidence:query.confidence,calculatedAt:{gte:query.dateFrom,lte:query.dateTo},passage:{status:{not:"DELETED"},cameraId:query.cameraId,location:query.location?{contains:query.location,mode:"insensitive"}:undefined}},orderBy:[{score:"desc"},{windowEnd:"desc"},{id:"desc"}],take:Math.min(5000,query.limit*20),select:{id:true,normalizedLicensePlate:true,score:true,confidence:true,reasonsJson:true,calculatedAt:true,windowEnd:true,passage:{select:{displayLicensePlate:true,timestamp:true,timezone:true,location:true,camera:{select:{id:true,name:true,historicalName:true,vpnLocation:{select:{timezone:true}}}}}}}});
-    const latest=new Map<string,typeof snapshots[number]>();
-    for(const snapshot of snapshots)if(!latest.has(snapshot.normalizedLicensePlate))latest.set(snapshot.normalizedLicensePlate,snapshot);
-    const patterns=[...latest.values()].slice(0,query.limit).map(snapshot=>{const passage=snapshot.passage;const timeZone=passage.timezone??passage.camera?.vpnLocation?.timezone;return{ id:snapshot.id,normalizedLicensePlate:snapshot.normalizedLicensePlate,displayLicensePlate:passage.displayLicensePlate,score:snapshot.score,confidence:snapshot.confidence,reasons:snapshot.reasonsJson,calculatedAt:snapshot.calculatedAt,lastPassageAt:passage.timestamp,timeZone,location:passage.location,camera:passage.camera?{id:passage.camera.id,name:passage.camera.historicalName??passage.camera.name}:null};});
-    return reply.header("Cache-Control","private, no-store").send({patterns});
+    const query=z.object({minScore:z.coerce.number().int().min(0).max(100).optional(),confidence:z.enum(["LOW","MEDIUM","HIGH"]).optional(),dateFrom:z.coerce.date().optional(),dateTo:z.coerce.date().optional(),cameraId:z.string().uuid().optional(),location:z.string().trim().max(120).optional(),sort:z.enum(["scoreDesc","scoreAsc","recent"]).default("scoreDesc"),page:z.coerce.number().int().min(1).default(1),limit:z.coerce.number().int().min(1).max(100).default(50)}).parse(request.query);
+    const snapshots=await prisma.attentionSnapshot.findMany({where:{expiresAt:{gt:new Date()},calculatedAt:{gte:query.dateFrom,lte:query.dateTo},passage:{status:{not:"DELETED"},cameraId:query.cameraId,location:query.location?{contains:query.location,mode:"insensitive"}:undefined}},orderBy:[{windowEnd:"desc"},{id:"desc"}],take:5000,select:{id:true,normalizedLicensePlate:true,score:true,confidence:true,reasonsJson:true,calculatedAt:true,windowEnd:true,passage:{select:{displayLicensePlate:true,timestamp:true,timezone:true,location:true,camera:{select:{id:true,name:true,historicalName:true,vpnLocation:{select:{timezone:true}}}}}}}});
+    const ordered=selectAndSortAttentionPatterns(snapshots,query.sort).filter(snapshot=>(query.minScore===undefined||snapshot.score>=query.minScore)&&(!query.confidence||snapshot.confidence===query.confidence));
+    const total=ordered.length;const offset=(query.page-1)*query.limit;
+    const patterns=ordered.slice(offset,offset+query.limit).map(snapshot=>{const passage=snapshot.passage;const timeZone=passage.timezone??passage.camera?.vpnLocation?.timezone;return{ id:snapshot.id,normalizedLicensePlate:snapshot.normalizedLicensePlate,displayLicensePlate:passage.displayLicensePlate,score:snapshot.score,confidence:snapshot.confidence,reasons:snapshot.reasonsJson,calculatedAt:snapshot.calculatedAt,lastPassageAt:passage.timestamp,timeZone,location:passage.location,camera:passage.camera?{id:passage.camera.id,name:passage.camera.historicalName??passage.camera.name}:null};});
+    return reply.header("Cache-Control","private, no-store").send({patterns,total,page:query.page,limit:query.limit,totalPages:Math.max(1,Math.ceil(total/query.limit)),sort:query.sort});
   });
 
   app.get("/attention/:normalized",{preHandler:requirePermission(PERMISSIONS.PASSAGES_VIEW)},async(request,reply)=>{

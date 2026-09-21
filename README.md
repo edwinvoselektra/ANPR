@@ -1,13 +1,11 @@
 # ANPR Platform
 
-Een webbased ANPR-platform voor buurtpreventie. Fase 1 levert werkend gebruikers- en
-camerabeheer, veilige authenticatie, een dashboard, echte RTSP/FFmpeg-verbindingstests
-en een duidelijk gemarkeerde demo/simulator. Fase 2.1 voegt een zelfstandige
-video-worker toe die actieve camera's bewaakt en begrensd echte testframes ophaalt.
-Fase 2.2 voegt optionele Dahua-camera-ANPR-inname, echte passageopslag en het scherm
-**Live passages** toe. Fase 2.3 levert kenteken- en groepenbeheer, automatische hits,
-database-side zoeken en kentekendossiers. Fase 2.4 maakt de webapp installeerbaar als
-PWA en voegt persoonlijke Web Push-hitmeldingen toe. Server-side OCR blijft een latere provider.
+Een webbased ANPR-platform voor buurtpreventie. Het platform bevat veilig gebruikers-
+en camerabeheer, RTSP/FFmpeg-diagnose, afzonderlijke video- en ANPR-workers, Dahua
+CGI-eventinname, passage- en hitopslag, kenteken- en groepenbeheer, database-side
+zoeken, PWA/Web Push en een transparante aandachtsscore voor passagepatronen. De
+ITSAPI V1.19-ontvanger blijft diagnostisch totdat heartbeat- en passagepayloads op de
+echte firmware zijn bewezen. Live browservideo en server-side OCR zijn nog niet gebouwd.
 
 > **Belangrijk:** demo-passages zijn geen echte ANPR-detecties. De interface toont ze
 > altijd met bron `DEMO`.
@@ -442,10 +440,12 @@ gebruikt. Verwijder geen volumes en pas Docker-socketrechten niet aan.
 - [ER605 WireGuard instellen](docs/er605-wireguard-setup.md)
 - [Dahua TCP / SDK koppelen](docs/dahua-tcp-sdk.md)
 
-## Stop na Fase 2.4.5
+## Huidige afbakening
 
-Fase 2.5 Live camera's, server-OCR en productiedeployment zijn niet gestart. Eerst
-volgt de handmatige ER605- en recorder-test uit de handleiding.
+Live camera's en server-OCR zijn niet gestart. De publieke HTTPS-testomgeving gebruikt
+wel een productiebuild via `docker-compose.external.yml`; dit is geen volledige
+productiedeployment. Voor VPN blijft de handmatige ER605- en recorder-test uit de
+handleiding nodig.
 
 ### Dahua-camera’s: ITSAPI en CGI afzonderlijk
 

@@ -2,7 +2,6 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { Socket } from "node:net";
 import { decryptSecret, encryptSecret } from "./crypto.js";
-import { testRtsp } from "./rtsp.js";
 
 export type CapabilityStatus = "SUPPORTED" | "UNSUPPORTED" | "UNKNOWN";
 export type DeviceCategory = "CAMERA" | "NVR" | "AUTO";
@@ -56,11 +55,6 @@ export type DeviceConnectionResult = {
 export interface DeviceConnectionProvider<TInput, TResult> {
   readonly type: string;
   test(input: TInput): Promise<TResult>;
-}
-
-export class RtspProvider implements DeviceConnectionProvider<{ url: string; createSnapshot?: boolean }, Awaited<ReturnType<typeof testRtsp>>> {
-  readonly type = "RTSP";
-  test(input: { url: string; createSnapshot?: boolean }) { return testRtsp(input.url, input.createSnapshot); }
 }
 
 type ResolveHost = (host: string) => Promise<string[]>;

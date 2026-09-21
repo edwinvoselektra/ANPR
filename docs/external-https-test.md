@@ -72,3 +72,25 @@ Na omschakelen één keer de publieke pagina opnieuw laden zodat de browser de n
 - Typecheck, lint en alle 263 unit-/componenttests opnieuw geslaagd na de API-headerwijziging.
 
 Cloudflare DNS, tunnel en WAF zijn ongewijzigd gebleven. Dit is de door de gebruiker aangevraagde externe **testomgeving**; geen remote Git-push uitgevoerd.
+
+## Mobiele sessiestart (21 september 2026)
+
+De publieke omgeving was opnieuw met alleen `docker-compose.yml` gestart en serveerde
+daardoor `next dev`, HMR en devtools via de tunnel. Tegelijk kende `AppShell` alleen de
+toestanden “laden” en “ingelogd”: een hangende sessieaanvraag of mislukte client-side
+redirect na een 401 liet “Beveiligde omgeving laden…” onbeperkt staan.
+
+De sessiestart heeft nu expliciete loading-, authenticated-, unauthenticated- en
+errorstates. `/api/auth/me` gebruikt de same-origin proxy, `no-store` en een timeout van
+tien seconden. Een 401/403 toont direct een loginmogelijkheid; netwerk-, 500- en
+ongeldige responses tonen opnieuw proberen en een gewone `/login`-link. De service
+worker heeft geen fetch-handler, wordt met `updateViaCache: "none"` geregistreerd en
+`/sw.js` krijgt `no-cache, no-store`, zodat een oude workerupdate niet vier uur via de
+publieke cache blijft hangen.
+
+De lokale ontwikkelmodus accepteert voor mutaties uitsluitend de ingestelde weborigin
+plus localhost, private LAN-adressen en lokale hostnamen op poort 3000. Productie blijft
+beperkt tot de exact ingestelde HTTPS-origin. Developmentcookies zijn host-only,
+HttpOnly en zonder `Secure` voor lokaal HTTP; productiecookies blijven host-only,
+HttpOnly, SameSite=Strict en Secure. De bestaande standaard van zeven dagen blijft
+ongewijzigd.

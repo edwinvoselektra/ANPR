@@ -35,6 +35,20 @@ De passage-transactie maakt ook één unieke `AttentionAnalysisJob`. De ANPR-wor
 
 - `GET /attention/:normalized` — nieuwste beschikbare score;
 - `GET /attention/:normalized/history?limit=25` — begrensde historie, maximaal 100;
+- `GET /attention/patterns` — server-side gefilterde en gepagineerde kentekens; standaard op score aflopend en bij een gelijke score op nieuwste waarneming;
+- `GET /attention/config` — vaste engineconfiguratie, uitsluitend voor ADMIN;
 - `PUT /attention/:snapshotId/review` — ADMIN-review met `NORMAL`, `ATTENTION`, `SUSPICIOUS_PATTERN` of `INSUFFICIENT_INFO`.
 
 De API retourneert geen ruwe passagepayloads, credentials of interne jobdetails.
+
+De webapp toont score en redenen in het kentekendossier en compacte badges bij
+passages, hits en zoekresultaten. **Opvallende patronen** gebruikt uitsluitend het
+begrensde read-only endpoint. De simulator maakt DEMO-passages via dezelfde centrale
+passage- en analyseflow en leest daarna de echte backendscore; er staan geen
+voorgeprogrammeerde scores in de interface.
+
+De patronenlijst kiest eerst de nieuwste beschikbare snapshot per kenteken. De API
+sorteert daarna met een stabiele volgorde en pagineert pas als laatste. Scores met
+`LOW` confidence (onvoldoende gegevens) en eventueel ontbrekende scores staan na
+daadwerkelijk beoordeelde scores. De interface biedt daarnaast score oplopend en
+meest recent als sorteermogelijkheden.

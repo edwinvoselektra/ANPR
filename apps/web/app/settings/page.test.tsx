@@ -41,6 +41,13 @@ describe("Web Push-toestemming", () => {
     expect(serviceWorker).toContain("existing.navigate(target)");
   });
 
+  it("laat de service worker geen API-, auth- of paginaverkeer cachen", () => {
+    const serviceWorker = readFileSync(join(process.cwd(), "public/sw.js"), "utf8");
+    expect(serviceWorker).not.toContain('addEventListener("fetch"');
+    expect(serviceWorker).not.toContain("caches.put");
+    expect(serviceWorker).not.toContain("respondWith");
+  });
+
   it("vraagt nooit automatisch toestemming bij het openen van Instellingen", async () => {
     render(<SettingsPage/>);
     expect(await screen.findByText("Web Push is geconfigureerd.")).toBeTruthy();

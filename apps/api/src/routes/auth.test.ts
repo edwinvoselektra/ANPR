@@ -6,7 +6,7 @@ const mocks=vi.hoisted(()=>({sessionUpdate:vi.fn(),audit:vi.fn()}));
 vi.mock("../lib/prisma.js",()=>({prisma:{userSession:{update:mocks.sessionUpdate}}}));
 vi.mock("../lib/audit.js",()=>({audit:mocks.audit}));
 vi.mock("../lib/auth.js",()=>({SESSION_COOKIE:"anpr_session",authenticate:async(request:any)=>{request.authUser={id:"11111111-1111-4111-8111-111111111111",sessionId:"22222222-2222-4222-8222-222222222222",roles:["ADMIN"],permissions:[]}}}));
-import { authRoutes, sessionPolicy } from "./auth.js";
+import { authRoutes, sessionCookieOptions, sessionPolicy } from "./auth.js";
 
 afterEach(()=>vi.clearAllMocks());
 
@@ -23,6 +23,18 @@ describe("login session policy", () => {
     const policy = sessionPolicy(false, now);
     expect(policy.expiresAt.toISOString()).toBe("2026-09-15T22:00:00.000Z");
     expect(policy.cookieExpiry).toBeUndefined();
+  });
+
+  it("gebruikt een host-only httpOnly-cookie die alleen in productie Secure is", () => {
+    const expires = new Date("2026-09-22T10:00:00.000Z");
+    expect(sessionCookieOptions(expires, "development")).toEqual({
+      path: "/", httpOnly: true, sameSite: "strict", secure: false, expires
+    });
+    expect(sessionCookieOptions(expires, "production")).toEqual({
+      path: "/", httpOnly: true, sameSite: "strict", secure: true, expires
+    });
+    expect(sessionCookieOptions(undefined, "development")).not.toHaveProperty("expires");
+    expect(sessionCookieOptions(undefined, "development")).not.toHaveProperty("domain");
   });
 });
 
