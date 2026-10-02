@@ -1,5 +1,4 @@
-import type { CameraDirection, CameraDirectionMapping, VehicleColor, VehicleType } from "@prisma/client";
-import type { CameraSourceDirection } from "@anpr/shared";
+import type { CameraDirection, CameraDirectionMapping } from "@prisma/client";
 
 export type ManagedAnprCamera = {
   vpnLocation?: {timezone:string}|null;
@@ -18,33 +17,8 @@ export type ManagedAnprCamera = {
   updatedAt: Date;
 };
 
-export type EventImage = { contentType: "image/jpeg"; data: Buffer };
-export type NormalizedAnprEvent = {
-  cameraId: string;
-  occurredAt: Date;
-  originalPlate: string;
-  normalizedPlate: string;
-  plateCountry?: string;
-  confidence?: number;
-  vehicleType?: VehicleType;
-  vehicleColor?: VehicleColor;
-  vehicleBrand?: string;
-  direction?: CameraDirection;
-  sourceDirection?: CameraSourceDirection;
-  lane?: number;
-  overviewImage?: EventImage;
-  plateImage?: EventImage;
-  extraImage?: EventImage;
-  source: "DAHUA_CAMERA";
-  sourceEventId?: string;
-  rawMetadata?: Record<string, string | number | boolean>;
-};
-
-export type ProviderLogger = {
-  info(message: string, cameraName?: string): void;
-  warn(message: string, cameraName?: string): void;
-  error(message: string): void;
-};
+export type { EventImage, NormalizedAnprEvent, ProviderLogger } from "@anpr/shared/anpr-event";
+import type { NormalizedAnprEvent } from "@anpr/shared/anpr-event";
 
 export interface AnprEventProvider {
   readonly kind: Exclude<ManagedAnprCamera["anprProvider"], "NONE">;

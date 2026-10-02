@@ -17,6 +17,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./anpr-event": {
+      "types": "./dist/anpr-event.d.ts",
+      "default": "./dist/anpr-event.js"
+    },
+    "./passage-storage": {
+      "types": "./dist/passage-storage.d.ts",
+      "default": "./dist/passage-storage.js"
+    },
+    "./passage-service": {
+      "types": "./dist/passage-service.d.ts",
+      "default": "./dist/passage-service.js"
     }
   },
   "scripts": {

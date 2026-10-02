@@ -125,7 +125,7 @@ Stop het volgen van logs met `Ctrl+C`; de containers blijven draaien.
 
 Afwijkende RTSP-gegevens en de bestaande transport-/zonewizard staan onder **Geavanceerd**. De bestaande CGI-eventstream blijft beschikbaar als alternatief; dit is geen ITSAPI. VPN is behouden.
 
-**ITSAPI-status:** diagnostische receiver aanwezig; echte registratie, heartbeat, payloadmapping en ACK nog niet geverifieerd. Zie [ontvanger, camerakaart, ontbrekend protocolbewijs en testprocedure](docs/itsapi-receiver.md). De camera bevestigt V1.19, `/NotificationInfo/KeepAlive` en `/NotificationInfo/TollgateInfo`. Intern luistert de API op 7070; op deze Windows-pc bezet AnyDesk poort 7070 en publiceert Docker daarom **7071** (`ITSAPI_PUBLISHED_PORT=7071` in lokale `.env`). Voorgesteld adres: **`http://192.168.178.18:7071`**, nog door admin te bevestigen.
+**ITSAPI-status:** afzonderlijke heartbeat- en TollgateInfo-handlers voor het Picture-profiel, met Device-ID/Digest-validatie, passage- en beeldopslag, bestaande watchlist/push-keten en idempotente retries. Succes-ACK volgt alleen na verwerking. PostgreSQL-integratie met synthetische uploads en push-stub getest; compatibiliteit met de fysieke camera op `192.168.178.248` en ACK-acceptatie nog niet bevestigd. Doeladres volgens de huidige gebruikerswaarneming: `192.168.178.52:7070`. Zie [ondersteunde velden, beperkingen, lokale tests en exacte uitrolcommando’s](docs/itsapi-receiver.md).
 
 Camera-credentials worden met AES-256-GCM versleuteld opgeslagen. De browser krijgt
 opgeslagen credentials en volledige credential-URL's nooit terug.

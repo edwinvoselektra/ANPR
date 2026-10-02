@@ -1,136 +1,203 @@
-# Dahua ITSAPI V1.19: ontvanger en cameradiagnose
+# Dahua ITSAPI: heartbeat, passages en uitrol
 
-## Status en afbakening
+## Status — 2 oktober 2026
 
-De standaardroute is **Camera’s → Camera toevoegen → Dahua ANPR-camera** met vier stappen: Camera, Beeld controleren, Kentekengegevens koppelen, Praktijktest en afronden. De oude transport-/zonewizard blijft onder **Geavanceerd** beschikbaar. VPN-locaties, ER605/WireGuard, bestaande credentials en RTSP-instellingen blijven behouden.
+De receiver heeft afzonderlijke POST-handlers voor `/NotificationInfo/KeepAlive` en `/NotificationInfo/TollgateInfo`. Voor het ondersteunde **Picture-profiel** verwerkt hij identiteit, heartbeat, passage, JPEG-beelden, watchlist-hit en de bestaande pushopdracht. Succes volgt pas na een databasecommit of herkenning van een bestaande passage. `ItsapiInbox` blijft uitsluitend een begrensde diagnostische laag; ruwe payloads worden daar niet opgeslagen.
 
-**CGI is geen ITSAPI.** De eerder werkende `DAHUA_CGI`-eventstream is een aanvullend alternatief. Een HTTP 200 op die stream bewijst geen ITSAPI-upload. De oudere naam “Dahua Native ANPR (ITSAPI)” was onjuist en is gecorrigeerd.
+**De fysieke camera is nog niet met deze implementatie getest.** Volgens de gebruiker stuurt `192.168.178.248` JSON naar `192.168.178.52:7070`. Er is geen geschoonde payload of ACK-capture van die camera aangeleverd. De implementatie ondersteunt een expliciet afgebakend profiel; een afwijkende firmwarestructuur krijgt een fout, geen verzonnen succes. `/health` houdt daarom `protocolVerified:false` en `cameraConnectionProven:false`: deze endpoint is geen camera-acceptatietest.
 
-De ITSAPI-ontvanger werkt als begrensde **diagnostische ontvanger**, onafhankelijk van de browser. Er is nog geen geverifieerde registratie-, heartbeat- of passageparser voor deze firmware. Hij geeft onbekende berichten HTTP 501 `PROTOCOL_NOT_VERIFIED`, ook wanneer Digest klopt. Hij geeft geen verzonnen succes-ACK. Ontvangen structuren zijn geen duurzame passage-inbox: scalars en beelden worden niet bewaard en kunnen niet later tot passages worden gereconstrueerd.
+Protocolbasis: [Dahua Web 5.0-handleiding §9.4.9.3](https://material.dahuasecurity.com/uploads/cpq/DOR/PUM0004975/Smart_ANPR_Camera_Web_5.0_Operation_Manual_V1.0.0.pdf) bevestigt HTTP/JSON/Digest, maar specificeert niet alle payloadvelden. De [gepubliceerde push-integratiespecificatie §§4.2–4.3](https://www.scribd.com/document/964042803/Integration-Push-function-2) beschrijft het geïmplementeerde Picture-profiel en de ACKs; dit document betreft Intelbras, **geen bewijs voor Dahua V1.19 op deze specifieke camera**. Een [door de auteur gepubliceerde ITC413-implementatie](https://gist.github.com/paindefender/cf74164ade12f8a2954f271f3d5972e7) gebruikt eveneens `Picture`, maar een andere heartbeat-response. Die variatie maakt de fysieke acceptatietest noodzakelijk. De referentie-implementatie is niet gekopieerd; onder meer bestandsnamen en ongecontroleerde succesresponses worden hier niet overgenomen.
 
-Dit volgt de opdracht om bij ontbrekend protocolbewijs bruikbare infrastructuur af te maken zonder de hardwarekoppeling als voltooid te markeren.
+## Ondersteunde velden
 
-## Bevestigd op de fysieke camera
+Heartbeat: object met `Active: "keepAlive"` en `DeviceID`. Device ID moet exact overeenkomen met `ItsapiRegistration.expectedDeviceId`; geconfigureerde protocolversie moet `V1.19` zijn.
 
-Gebruiker heeft de instellingen van DHI-ITC413-PW4D-IZ3 gecontroleerd en een screenshot geleverd:
+TollgateInfo: één object onder `Picture`, geen batch of multipart.
 
-| Onderdeel | Waarde |
+| Payloadveld | Verwerking |
 | --- | --- |
-| Protocol Version | V1.19 |
-| Heartbeat Interface | `/NotificationInfo/KeepAlive` |
-| ANPR Info Interface | `/NotificationInfo/TollgateInfo` |
-| Heartbeat Interval | 300 seconden |
-| Registration / Heartbeat | Aan |
-| Reupload Times | 2 |
-| Type of Upload Content | All |
-| Max Keep-alive Request | 0 |
-| ANPR Info | Aan |
-| Authentication op screenshot | Uit; voor onze ontvanger inschakelen |
-| Bestaande Platform Server | `http://192.168.0.1:7070`; dit is niet ons platform |
-| Device ID | Bestaande ID behouden; volledige waarde nog niet aangeleverd |
+| `Plate.PlateNumber` | Verplicht kenteken; origineel, genormaliseerd en weergavewaarde in passage |
+| `Plate.IsExist` | Indien false: geen passage; 422 |
+| `SnapInfo.DeviceID` | Verplicht; exact vergelijken met registratie |
+| `SnapInfo.AccurateTime`, anders `SnapTime` | Verplichte gebeurtenistijd; milliseconden behouden |
+| `Plate.Channel` | Onderdeel van eventidentiteit; standaard 0 |
+| `Plate.Confidence` | Optioneel geheel getal 0–255, opgeslagen als waarde / 255 |
+| `Vehicle.VehicleType` | Bekende teksttypen naar platformenum; anders UNKNOWN |
+| `Vehicle.VehicleColor` | Bekende tekstkleuren naar platformenum; anders OTHER |
+| `Vehicle.VehicleSign` | Optioneel merk |
+| `SnapInfo.Direction` | Approach/Incoming en Away/Outgoing via bestaande camerarichtingmapping |
+| `SnapInfo.SnapAddress` | Optionele passagelocatie; anders geconfigureerde cameralocatie |
+| `SnapInfo.LanNo` | Optionele rijstrook |
+| `NormalPic.Content` | Original Image, base64 JPEG |
+| `CutoutPic.Content` | Plate Cutout, base64 JPEG |
+| `VehiclePic.Content` | Vehicle Body Cutout, base64 JPEG |
 
-De tekstuele controle meldde Enable uit; het latere screenshot toont Enable aan. Niet vastgesteld of de screenshotinstellingen opgeslagen zijn. Er zijn door de ontwikkelaar geen camera-instellingen gewijzigd.
+Niet herkende richtingswaarden, waaronder `Obverse` en `Reverse`, worden als `rawDirection` bewaard en geven richting UNKNOWN. Hun relatie tot de opgestelde camera is nog niet vastgesteld; er wordt geen rijrichting verzonnen. Ook de confidence-schaal 0–255 moet bij de fysieke camera worden bevestigd. Ontbrekende of onbruikbare optionele voertuigmetadata blokkeert geen passage.
 
-Primaire bronnen: [Dahua Web 5.0-handleiding, §9.4.9.3](https://material.dahuasecurity.com/uploads/cpq/DOR/PUM0004975/Smart_ANPR_Camera_Web_5.0_Operation_Manual_V1.0.0.pdf) bevestigt HTTP, JSON en Digest, maar bevat geen volledige wire-specificatie. [Productinformatie ITC413-PW4D](https://www.dahuasecurity.com/nl/products/Traffic/Smart-Parking-Products/Access-ANPR-Cameras/ITC413-PW4D-Series). De op de echte camera getoonde paden zijn leidend; andere fabrikanten of synthetische fixtures gelden niet als bewijs voor deze firmware.
+Tijd zonder offset gebruikt de tijdzone van de cameralocatie, anders `PLATFORM_TIMEZONE`. Ongeldige tijden en dubbelzinnige of niet-bestaande lokale zomertijdmomenten worden geweigerd. Er is **geen ontvangsttijd-fallback**, omdat die retries tot nieuwe events zou maken.
 
-## Werkelijk netwerk en poorten op deze installatie
+Ontbrekende beelden of lege `Content` zijn toegestaan. Aangeleverde beelden moeten canonieke base64 met JPEG-begin/eindmarkeringen zijn, maximaal 8 MB per beeld en gezamenlijk binnen de 16 MB requestlimiet. Dit is formaat-/groottevalidatie, geen volledige JPEG-decodering. Geen downloads vanaf payload-URL's, geen gebruik van `PicName` als opslagpad en geen beeldbewerking in de API. De modulaire async opslagprovider schrijft naar disk/NAS; PostgreSQL bevat alleen objectverwijzingen. Een ongeldige aangeleverde afbeelding geeft 422; een opslagfout geeft 503.
 
-- De gedeelde ontvanger draait in het bestaande API-proces, op `0.0.0.0:7070` binnen de API-container.
-- Docker kan Windows-poort 7070 niet publiceren: `Get-NetTCPConnection` wees PID 8908 aan; `Get-Process` identificeerde **AnyDesk**. Dit programma is niet gestopt.
-- Daarom bevat de lokale, genegeerde `.env` **`ITSAPI_PUBLISHED_PORT=7071`**. Docker publiceert `0.0.0.0:7071 → api:7070`.
-- Windows Ethernet 3 heeft bij uitlezen `192.168.178.18`; de tweede adapter had een APIPA-adres en is geen kandidaat. Er is geen gebruikersbestand `.wslconfig` aangetroffen; de effectieve netwerkmodus wordt daarmee niet als bewezen aangemerkt.
-- Windows heeft de health-response ontvangen via **`http://192.168.178.18:7071/health`**: `listening:true`, `protocolVerified:false`, `cameraConnectionProven:false`.
-- **Voorgesteld Platform Server: `http://192.168.178.18:7071`. De admin moet bevestigen dat dit de bedoelde ANPR-pc is.** Het adres wordt niet automatisch op camera’s ingevuld.
-- Dit bewijst interne werking en bereikbaarheid vanaf Windows. Bereikbaarheid vanuit de fysieke camera en een geldige cameraregistratie zijn nog niet bewezen.
+## Responses en authenticatie
 
-De repository-default blijft 7070; de configuratiekaart toont de ingestelde gepubliceerde poort. Voor toekomstige VPN-camera’s gebruikt de admin het door die camera bereikbare LAN-/VPN-serveradres en dezelfde gedeelde ontvanger. RTSP gaat platform → camera; ITSAPI gaat camera → platform. Een van beide bewijst de andere niet. Controleer overlappende subnetten bij bestaande VPN-locaties; er worden geen routes of subnetten gewijzigd.
+Alleen geldige en gecommitte berichten krijgen HTTP **200** met `Content-Type: application/json; charset=utf-8` en de door Fastify bepaalde juiste `Content-Length`:
 
-Lees zo nodig [Microsoft WSL-netwerkdocumentatie](https://learn.microsoft.com/en-us/windows/wsl/networking) en [Docker port publishing](https://docs.docker.com/engine/network/port-publishing/). Er is geen router-portforwarding nodig als standaardoplossing. Database en Redis blijven intern.
-
-## Instellingen overnemen en eerste hardwaretest
-
-1. Laat **ITSAPI Enable uit** zolang adres en uploadinlog niet compleet zijn. Als Enable van de screenshot is opgeslagen, zet het voorlopig handmatig uit.
-2. **Laat de werkende camera op DAHUA_CGI staan.** Voor protocolonderzoek gebruik je een apart, inactief ITSAPI-concept in de wizard met de bestaande Device ID. Conceptuploads maken geen passages of hits. Schakel de werkende camera pas om nadat registratie, heartbeat, payloadmapping en ACK bewezen zijn; de huidige ontvanger is daar nog niet klaar voor.
-3. Open voor dat ITSAPI-concept **Diagnose → ITSAPI-uploadinstellingen** als admin. Vul het bevestigde serveradres, V1.19 en de volledige bestaande Device ID in. Kopieer de volledige ID in het cameraveld met Ctrl+A/Ctrl+C; wijzig hem niet. Vul geen afgekapt ID-fragment in.
-4. Sla de uploadinstellingen op. Klik **Uploadwachtwoord tonen**. Neem de afzonderlijk gegenereerde upload-gebruikersnaam en het uploadwachtwoord over. Dit is niet de bestaande camera-admininlog. Secrets worden alleen via deze geautoriseerde no-store-actie getoond; raadpleeg ze niet via logs of Git.
-5. Zet **Authentication aan** in de camera en neem die uploadinlog over. Houd Registration en Heartbeat aan, interval 300, en beide bevestigde paden ongewijzigd. De exacte registratie-URL is nog onbekend; verzin daarvoor geen pad.
-6. Data: ANPR Info aan; behoud Plate No., Vehicle Color, Logo, Vehicle Type, Driving Direction, Time, Location. Zet Accuracy aan als je die informatie wilt ontvangen; confidence-schaal is nog niet geverifieerd. Vehicle in Blocklist mag mee als metadata, maar onze eigen watchlist bepaalt hits. Geen synchronisatie naar de camera.
-7. Picture: vink **Original Image**, **Plate Cutout** en **Vehicle Body Cutout** aan. Laat **Unlicensed Vehicle** voor de eerste test uit. Behoud Encoding Format **UTF8**. Deze instelling is geen bewijs dat alle drie beeldtypen worden geleverd; ze worden pas na een echt verzoek bevestigd. Parking Info en Barrier Opening zijn niet nodig. Device Basic Info kan later bij de protocoltest worden ingeschakeld, zonder een zelfverzonnen endpoint.
-8. Schakel in het platform **Structuurdiagnose 15 minuten** in. Als adres en authenticatie compleet zijn en de ontvanger draait, mag Enable **tijdelijk voor protocolonderzoek** aan. Dit is nog geen productiekoppeling: de ontvanger zal onbekende berichten met 501 afwijzen en de camera kan herhalen. Zet Enable na de korte capture weer uit. Laat de camera-instellingen niet urenlang onbevestigd proberen.
-9. Observeer eerst een request op `/NotificationInfo/KeepAlive`; wacht ten minste één ingesteld interval. De eerste 401 is de normale Digest-challenge. Een daaropvolgende geverifieerde handtekening bewijst alleen de uploadinlog. Registratie, Device ID en geldige heartbeat blijven onbevestigd zolang de parser ontbreekt. Geen ontvangst bewijst geen firewallfout.
-10. Lever de begrensde structuurdiagnose en de officiële **ITSAPI V1.19 integratiespecificatie** of een verantwoord geschoond echt request/responsevoorbeeld aan. Nodig: methode, registratiepad, Device-ID-veld, heartbeat-/ANPR-schema, tijdzone, confidence-schaal, beeldcodering/relatie en exacte ACK. Authorization en wachtwoorden niet meesturen. Een schema zonder waarden is op zichzelf niet altijd voldoende om betekenis te verifiëren.
-11. Pas na implementatie en tests van die gegevens: echte geldige heartbeat aantonen, daarna één voertuig door de camera laten herkennen. Controleer eerst in de camera dat de passage daar bestaat; controleer vervolgens `/NotificationInfo/TollgateInfo`, opgeslagen velden en werkelijk ontvangen beelden, Live passages en Zoeken.
-12. Maak daarna uitsluitend met een expliciete test-watchlistmatch een hit. Test optioneel push en controleer het bedoelde toestel zelf. Een pushdienst die een melding accepteert bewijst geen zichtbare telefoonmelding. Test vervolgens uitschakelen/inschakelen en herstel na korte onderbreking. Deze hardwarestappen zijn nog niet uitgevoerd.
-
-Als er geen verzoek binnenkomt: controleer Platform Server, Enable, Authentication, de gekopieerde uploadinlog, adres/poort, routering en pas daarna een gerichte firewallregel. Voor deze lokale camera kan de admin indien nodig in verhoogde **Windows PowerShell** uitvoeren (alleen op een passend Private-netwerk):
-
-```powershell
-New-NetFirewallRule -DisplayName "ANPR ITSAPI camera 192.168.178.248" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 7071 -RemoteAddress 192.168.178.248 -Profile Private
+```json
+{"Active":true,"DeviceID":"<gevalideerde Device ID>"}
 ```
 
-Dit is slechts een voorstel; deze regel is niet automatisch uitgevoerd en er is geen firewallfout vastgesteld. Voor VPN-bronnen moet de werkelijk gebruikte bronroute/source-IP eerst worden vastgesteld; maak geen onbeperkte Internet-regel.
+Bovenstaand is KeepAlive. TollgateInfo, inclusief een idempotent herkende retry:
 
-## Implementatie en beveiliging
+```json
+{"Result":true,"DeviceID":"<gevalideerde Device ID>"}
+```
 
-- Per camera een versleuteld uploadwachtwoord; Digest realm `ANPR-ITSAPI`, MD5 met `qop=auth`, HMAC-getekende nonce van 5 minuten. Geen anonieme inname. Nonce-count wordt atomair in PostgreSQL bewaakt, ook over gelijktijdige requests. Firmware-compatibiliteit van deze Digest-variant moet nog met de camera worden bewezen.
-- Maximaal 16 MB per request, 15 seconden requesttime-out, 4 gelijktijdige uploads, 60 requests/minuut per bron-IP. Camera’s achter hetzelfde VPN/NAT-adres delen deze rate limit. Grote JSON wordt binnen deze grens in het API-proces verwerkt; toekomstige beeldverwerking/normalisatie hoort in een worker, niet in de HTTP-handler.
-- Alleen geauthenticeerde onbekende berichten krijgen een begrensde structuurregistratie. Maximaal 32 inboxregels per camera, 24 uur bewaring; extra structuurcapturing maximaal 15 minuten, alleen admin. Alleen veldnamen/typen, geen scalars, kentekens, Authorization, tokens, afbeeldingsdata of opgehaalde URL’s. Geen externe afbeeldingsfetches.
-- Onbekende heartbeat en ANPR-paden krijgen verschillende `kind`-labels met `_UNVERIFIED`. Registratie is apart zichtbaar als niet getest. Geen succesvolle ACK totdat het daadwerkelijke protocol en duurzame verwerking zijn geïmplementeerd.
-- Een concept is zeven dagen hervatbaar via draft-ID/UUID; alleen deze niet-geheime identifiers staan in sessionStorage. Workers en simulator sluiten concepten uit. PATCH kan een concept niet activeren. Afronden is een afzonderlijke adminactie. Cleanup verwijdert verlopen conceptcredentials en records zonder historie.
-- Diagnose heeft configuratieversie, testtijd, laatste succes, waarneming, foutcode, mogelijke oorzaken en herstelactie. Wijzigingen laten oud bewijs vervallen. Beeldtest gebruikt een nieuwe FFmpeg/RTSP-over-TCP-sessie en vereist werkelijk gedecodeerd JPEG-uitvoer; alleen streammetadata geeft geen succes. Snapshotopslagfout blijft apart van videodecodering.
-- Verwijderen vereist server-side adminrechten. De camera wordt gearchiveerd vanwege bestaande historische FK-relaties; actieve configuratie, camera-/uploadcredentials, zones, deviceverbindingen en diagnose-inbox worden verwijderd. Runtimeworkers stoppen na de configuratierefresh; late opslag kan de camera niet reactiveren. Schakel ITSAPI op de fysieke camera daarna zelf uit.
-- Simulator blijft duidelijk DEMO. Hits worden wel door de eigen watchlist bepaald; push staat standaard op SKIPPED en vereist een expliciete keuze.
-- CGI fallback-deduplicatie gebruikt exacte gebeurtenisidentiteit in plaats van een kort kenteken/tijdvenster; de bestaande PostgreSQL-unique constraint en cameravergrendeling beschermen gelijktijdige verwerking.
+De body bevat geen kenteken, whitelist-/blacklistopdracht of slagboomcommando.
 
-De feitelijk werkende keten en de drie ontvangen CGI-beelden staan beschreven in [groepshits en dashboard](group-hit-dashboard.md). Die waarneming bewijst geen ITSAPI-payloadmapping.
+| Status | Betekenis |
+| --- | --- |
+| 401, lege body | Ontbrekende/ongeldige Digest-auth of nonce-count replay; nieuwe Digest-challenge |
+| 403 | Device ID mismatch of ingetrokken/gewijzigde cameraconfiguratie |
+| 422 | Onbekende/ongeldige payload, tijd of beeld; ontbrekende configuratie; conceptcamera bij passage |
+| 400 / 413 / 415 | Ongeldige JSON / request te groot / content-type niet ondersteund |
+| 429 | Rate limit |
+| 503 | Receiver bezet, databasefout of beeldopslagfout; geen ACK |
+| 501 | Ander, niet ondersteund endpoint of methode via de fallback-handler |
 
-## Expliciete TODO’s vóór productie-ITSAPI
+Fouten hebben een veilige `error`-code. Payloadfouten bevatten ook een vaste uitleg en `missing` met verwachte schemavelden, nooit aangeleverde waarden. De eerste 401 in een Digest-handshake is normaal. Een herhaalde upload moet een nieuwe geldige nonce-count of een nieuwe challenge gebruiken: eventdeduplicatie schakelt de Digest-replaybeveiliging niet uit.
 
-1. Officieel V1.19-profiel met gevalideerde Device ID, registratie en heartbeat; alleen de juiste camera mag groen worden.
-2. Volledige/partiële ANPR-mapping, nullable ontbrekende metadata, oorspronkelijke en ontvangen tijd, zichtbare onbekende tijdzone en bevestigde confidence-schaal. CGI-normalisatie is geen bewijs voor ITSAPI.
-3. Duurzame verwerkingsinbox met bewezen ACK en worker-retries/herstel. De huidige structuurdiagnose is geen opnieuw verwerkbare eventopslag.
-4. Beeldextractie met bewezen codering, herkomst/tijdstip en aanvullen van laat ontvangen beelden aan dezelfde passage.
-5. Protocolspecifieke eventidentiteit die hergebruik na reboot onderscheidt. De huidige CGI-EventID-route moet ook bij firmware die IDs hergebruikt verder worden onderbouwd.
-6. End-to-end ITSAPI → passage → eigen watchlist → hit → push; optionele vastlegging van door de gebruiker bevestigde toestelontvangst. Er is nog geen gebruikersbevestigingsfunctie voor toestelontvangst.
-7. Echte camera-, VPN- en hersteltests. Synthetische testresultaten vullen deze hardwarestatussen niet in.
+## Transactie, retries en status
 
-## Starten en testen
+De gedeelde `PassageService` wordt door CGI en ITSAPI gebruikt. Het bestaande CGI-gedrag blijft beschikbaar. Voor ITSAPI geldt:
 
-Werk vanuit `/home/edwin/projects/anpr-platform`. Bestaande `.env` en `CAMERA_CREDENTIALS_KEY` behouden. Voor deze Windows-installatie staat `ITSAPI_PUBLISHED_PORT=7071`; geen geheim. Een nieuwe installatie gebruikt `.env.example` en controleert eerst poortbeschikbaarheid.
+1. Digest en payload valideren; Device ID vergelijken. Alleen actieve, niet-gearchiveerde productiecamera's mogen passages maken. Concepten kunnen een geldige heartbeat leveren, maar geen echte passages.
+2. Eventkey: `itsapi:picture:v1:` plus SHA-256 van camera-ID, Device ID, exacte UTC-gebeurtenistijd, genormaliseerd kenteken en kanaal. Ontvangsttijd, uploadteller, beeldbytes en optionele voertuigvelden zitten niet in deze sleutel.
+3. Ontbrekende beelden via de opslagprovider opslaan. Een reeds volledig opgeslagen retry heeft geen nieuwe beeldwrites nodig.
+4. Camera in een PostgreSQL-transactie vergrendelen en actieve status, provider en configuratieversie opnieuw controleren. Binnen die lock de eventidentiteit opnieuw opzoeken. De bestaande unieke constraint `(cameraId, source, sourceEventId)` blijft de databasegarantie.
+5. Nieuwe passage, voertuig/plate-detection, attention-job en `detectAndCreateHit` in dezelfde transactie. Een hit krijgt de bestaande PENDING-pushstatus; de centrale dispatcher handelt die af.
+6. Een retry maakt geen nieuwe passage/hit/job. Later meegeleverde beelden vullen lege beeldslots en hit-beeldverwijzingen aan. Bestaande beelden worden niet overschreven.
+7. Device ID onder dezelfde lock opnieuw controleren en identiteit-/ontvangststatus vastleggen. Pas daarna ACK.
+
+Voor idempotentie moeten kenteken, gebeurtenistijd en kanaal bij retries gelijk blijven. Bij alleen secondeprecisie kunnen twee verder identieke events binnen dezelfde seconde niet worden onderscheiden; het gebruik van `AccurateTime` verdient de voorkeur. Na definitieve passageverwijdering bestaat de bijbehorende deduplicatiesleutel niet meer. Dit is geen levenslang replayarchief.
+
+`lastHeartbeatAt` wordt alleen door een geldige KeepAlive bijgewerkt. Geldige passages werken `lastEventAt` bij. Beide bevestigen `lastIdentityAt` en `anprConnectionStatus=CONNECTED`; een Digest-handtekening alleen doet dit niet. De heartbeatdiagnose wordt STALE na twee intervallen plus 30 seconden. `CONNECTED` is de laatst bevestigde ANPR-verbinding; de RTSP/videostatus blijft afzonderlijk. Configuratieversies voorkomen dat oud bewijs als nieuwe ontvangst geldt.
+
+De pushdispatcher gebruikt al unieke ontvanger-/hitkeys. De integratietest bewijst één geslaagde verzending via een stub bij camera-retries; dit bewijst geen toestelontvangst en verandert de bestaande retries van de externe pushdienst niet.
+
+## Logging en diagnose
+
+Voor beide paden verschijnt één `itsapi_response`-log na de response met method, vast pad zonder querystring, statuscode, request-content-type, request-content-length en begrensde payloadstructuur. Content-type wordt gereduceerd tot application/json/other/none. Content-length is de opgegeven header, geen gemeten bytes. Voor vroege afwijzingen is de body `not_parsed`.
+
+Geen scalarwaarden, credentials, Authorization, kentekens, beeldbytes of ruwe exceptions worden gelogd. Alleen toegestane schemaveldnamen blijven herkenbaar; overige namen worden `field_N`. De tijdelijke database-structuurdiagnose blijft maximaal 15 minuten inschakelbaar en kent een bewaartermijn van 24 uur, maximaal 32 regels per camera. `ItsapiInbox` bevat foutcode, ontbrekende velden en eventueel structuur; geen opnieuw verwerkbare passagepayload. Een gelijk diagnostisch fingerprint verhoogt `attempts`.
+
+## Gewijzigde bestanden en productieartefacten
+
+Neem de bronwijzigingen als één release mee; alleen `itsapi-receiver.ts` kopiëren is onvoldoende.
+
+Runtime/build:
+
+- `apps/api/src/itsapi-receiver.ts`
+- `apps/api/src/lib/itsapi-parser.ts` (nieuw)
+- `apps/api/src/lib/itsapi-protocol.ts`
+- `apps/api/src/lib/camera-diagnostics.ts`
+- `apps/api/src/routes/camera-onboarding.ts`
+- `packages/shared/package.json`
+- `packages/shared/src/anpr-event.ts` (nieuw)
+- `packages/shared/src/passage-service.ts` (verplaatst uit worker, uitgebreid)
+- `packages/shared/src/passage-storage.ts` (verplaatst uit worker)
+- `apps/anpr-worker/src/passage-service.ts`, `storage.ts`, `types.ts` (hergebruik gedeelde code)
+
+Tests/documentatie:
+
+- `apps/api/src/itsapi.test.ts`
+- `apps/api/src/itsapi-processing.test.ts` (nieuw)
+- `scripts/itsapi-smoke.mts`
+- `scripts/itsapi-processing-smoke.mts` (nieuw)
+- `README.md`, `docs/itsapi-receiver.md`
+
+Geen nieuwe schemawijziging of migratie; de bestaande migraties moeten wel aanwezig zijn. API en ANPR-worker opnieuw bouwen. Geen frontendwijziging. Geen `.env`, `node_modules`, lokale beelden, databases of testlogs naar Git/productie kopiëren.
+
+## Uitgevoerde verificatie
+
+- 195 API-tests geslaagd, waaronder 35 receiver-/verwerkingstests.
+- 42 ANPR-worker- en 46 shared-tests geslaagd.
+- Beide ITSAPI-smoketests geslaagd tegen een afzonderlijke PostgreSQL 16-container, inclusief echte transacties, gelijktijdige retries, bestandopslag en push-stub.
+- Lint, TypeScript en builds van API/shared/worker geslaagd. Workerbuild lokaal met afzonderlijke outputmap wegens bestaande bestandsrechten.
+- Docker-productieimages van API en worker gebouwd; bestaande Compose-overlay gevalideerd. Prisma-migratiestatus vanuit de API-productieimage tegen de testdatabase gecontroleerd.
+- Tijdelijke databasecontainer en bijbehorend testvolume opgeruimd. Geen productie-uitrol, wijziging van camerainstellingen of echte push uitgevoerd.
+
+## Lokaal testen
+
+Node 22+ met de repositorydependencies. Werk vanuit de projectmap:
 
 ```bash
 cd /home/edwin/projects/anpr-platform
-docker compose config --quiet
-docker compose build api web video-worker anpr-worker
-docker compose run --rm --no-deps api npm run db:migrate
-docker compose up -d --no-deps api web video-worker anpr-worker
+npm run db:generate
+npm run build -w @anpr/shared
+npm run typecheck -w @anpr/api
+npm run typecheck -w @anpr/anpr-worker
+npm run lint -w @anpr/api
+npm run lint -w @anpr/shared
+npm run lint -w @anpr/anpr-worker
+npm run test -w @anpr/api -- --configLoader native
+npm run test -w @anpr/anpr-worker
+npm run build -w @anpr/api
+npm run build -w @anpr/anpr-worker -- --outDir ../../node_modules/.itsapi-worker-build
 ```
 
-De laatste twee commando’s veronderstellen de reeds draaiende PostgreSQL/Redis uit dit project. Voor een nieuwe installatie: `docker compose up -d` volgens de README.
-
-```powershell
-Invoke-RestMethod -Uri "http://192.168.178.18:7071/health" -TimeoutSec 5
-```
-
-Checks met de Node-omgeving uit Docker, zonder Windows-npm te gebruiken:
+Isolatie voor de echte PostgreSQL-/beeldopslagtest: deze container bevat alleen synthetische testgegevens. Gebruik in deze WSL-installatie `docker.exe` in plaats van `docker` wanneer de Linux-CLI niet beschikbaar is. Dit is geen opdracht om productiecontainers te wijzigen.
 
 ```bash
-docker run --rm -v /home/edwin/projects/anpr-platform:/app -w /app anpr-platform-api sh -c 'npm run db:generate && npm run typecheck && npm run lint && npm test && npm run build'
+cd /home/edwin/projects/anpr-platform
+docker run --rm --detach --name anpr-itsapi-local-test --publish 127.0.0.1:55439:5432 --env POSTGRES_DB=anpr_native_test --env POSTGRES_USER=itsapi_test --env POSTGRES_PASSWORD=synthetic_local_test postgres:16-alpine
+until docker exec anpr-itsapi-local-test pg_isready -U itsapi_test -d anpr_native_test; do sleep 1; done
+(
+  export DATABASE_URL=postgresql://itsapi_test:synthetic_local_test@127.0.0.1:55439/anpr_native_test
+  export CAMERA_CREDENTIALS_KEY=0000000000000000000000000000000000000000000000000000000000000000
+  export REDIS_URL=redis://127.0.0.1:6379
+  export WEB_ORIGIN=http://localhost:3000
+  npm run db:migrate && npx tsx scripts/itsapi-processing-smoke.mts && npx tsx scripts/itsapi-smoke.mts
+)
+docker stop anpr-itsapi-local-test
 ```
 
-Integratie uitsluitend in de aparte database, zonder productiedispatcher. De scripts weigeren andere databasenamen en ruimen hun eigen fixtures op:
+De tests weigeren een andere databasenaam, gebruiken synthetische fixtures, verwijderen hun eigen records/beeldmap en versturen geen echte pushmeldingen. De nieuwe integratietest controleert ook gelijktijdige uploads, drie beeldkoppelingen, later aangeleverde beelden en één push per hit na een retry.
+
+Lokaal aangetroffen root-owned gegenereerde dependencies/buildoutput zijn waar nodig herstelbaar gekopieerd onder `node_modules` om Prisma en API/shared te kunnen bouwen. De workerbuild is daarnaast naar `node_modules/.itsapi-worker-build` uitgevoerd; de bestaande root-owned worker-distmap is niet verwijderd.
+
+## Veilig uitrollen op de bestaande installatie
+
+De huidige installatie gebruikt aantoonbaar `docker-compose.yml` plus `docker-compose.external.yml`; de API start gecompileerde JavaScript. Onderstaande commando's behouden die opstartvorm, bestaande secrets, poorten en volumes. **Niet uitgevoerd tijdens deze implementatie.**
+
+Breng eerst de hierboven genoemde bronbestanden/release naar de productiecheckout. Bewaar een terugkeerpunt van de bronrelease. Maak vóór wijzigingen aan een bestaande database een backup volgens het bestaande beheerproces; deze wijziging voegt zelf geen migratie toe.
 
 ```bash
-docker compose exec -T postgres sh -c 'createdb -U "$POSTGRES_USER" anpr_native_test'
-docker compose run --rm --no-deps -v /home/edwin/projects/anpr-platform:/app api sh -c 'export DATABASE_URL="${DATABASE_URL%/*}/anpr_native_test"; npm run db:migrate && npx tsx scripts/native-anpr-smoke.mts && npx tsx scripts/itsapi-smoke.mts && npx tsx scripts/group-hit-smoke.mts'
+cd /home/edwin/projects/anpr-platform
+set -e
+docker compose -f docker-compose.yml -f docker-compose.external.yml config --quiet
+ITSAPI_OLD_API_CONTAINER=$(docker compose -f docker-compose.yml -f docker-compose.external.yml ps -q api)
+ITSAPI_OLD_WORKER_CONTAINER=$(docker compose -f docker-compose.yml -f docker-compose.external.yml ps -q anpr-worker)
+ITSAPI_OLD_API_IMAGE=$(docker inspect --format '{{.Image}}' "$ITSAPI_OLD_API_CONTAINER")
+ITSAPI_OLD_WORKER_IMAGE=$(docker inspect --format '{{.Image}}' "$ITSAPI_OLD_WORKER_CONTAINER")
+docker image tag "$ITSAPI_OLD_API_IMAGE" anpr-platform-api:before-itsapi
+docker image tag "$ITSAPI_OLD_WORKER_IMAGE" anpr-platform-anpr-worker:before-itsapi
+docker compose -f docker-compose.yml -f docker-compose.external.yml build api anpr-worker
+docker compose -f docker-compose.yml -f docker-compose.external.yml run --rm --no-deps api node_modules/.bin/prisma migrate deploy --schema packages/database/prisma/schema.prisma
+docker compose -f docker-compose.yml -f docker-compose.external.yml up -d --no-deps api anpr-worker
+docker compose -f docker-compose.yml -f docker-compose.external.yml ps api anpr-worker
+docker compose -f docker-compose.yml -f docker-compose.external.yml exec -T api node -e 'fetch("http://127.0.0.1:7070/health").then(async r=>{console.log(await r.text());process.exitCode=r.ok?0:1}).catch(()=>{process.exitCode=1})'
+docker compose -f docker-compose.yml -f docker-compose.external.yml logs --since 5m api
 ```
 
-Als de testdatabase al bestaat, sla het `createdb`-commando over. Geen reset of volumeverwijdering uitvoeren.
+Stop bij een fout; gebruik geen `down -v`, reset of automatische databaseherstelactie. De twee `before-itsapi`-tags bewaren de vorige images; voor terugkeer herstel je de vorige bronrelease en gebruik je deze images met dezelfde Compose-configuratie. Geen migraties terugdraaien of historie verwijderen.
 
-## Migratie en herstel
+Cameratest na de uitrol:
 
-Nieuwe aanvullende migratie: `20260911000200_itsapi_receiver_drafts`. Bestaande camera’s krijgen `isDraft=false`, `configVersion=1`; bestaande providerinstellingen blijven behouden. Nieuwe tabellen: `ItsapiRegistration`, `ItsapiDigestReplay`, `ItsapiInbox`.
+1. Controleer platformcamera: provider DAHUA_ITSAPI, actieve camera voor passages, juiste bestaande Device ID en V1.19; Digest-uploadinlog correct overgenomen. Verander de video-/camera-admincredentials niet.
+2. Gebruik het door de camera bereikbare adres `http://192.168.178.52:7070` als dit nog de bedoelde receiver is. Eerdere documentatie met `192.168.178.18:7071` betrof een oudere AnyDesk/Windows-poortconflictconfiguratie en is geen huidig advies.
+3. Observeer een 401 gevolgd door 200 voor KeepAlive en een bijgewerkte heartbeatdiagnose. Als de camera bij 200 blijft retryen, onderzoek de firmware-ACK; zet geen generieke nep-success in.
+4. Laat één echte passage vastleggen. Controleer passage, opnametijd, richting, beelden en ontbrekende optionele gegevens. Controleer of de retries stoppen of dezelfde passage blijven gebruiken.
+5. Test met één expliciete test-watchlistmatch een hit en de push naar het bedoelde toestel. Synthetische tests bewijzen geen fysieke camera- of toestelwerking.
+6. Bij 422: gebruik foutcode, `missing` en structuurdiagnose om de werkelijk afwijkende firmwarevelden vast te stellen. Deel geen ongeschoonde payload, kentekenfoto of Authorization-header.
 
-Herstelpunt vóór deze opdracht: **`c3c2fc7`**. Voor de lokale migratie is een private dump gemaakt in `data/before-itsapi-20260912.dump` (genegeerd door Git); bewaar die vertrouwelijk. Deze dump en de bestaande encryptiesleutel horen bij elkaar. Geen automatische terugzetactie uitgevoerd.
-
-Voor codeherstel zonder werk kwijt te raken: maak een aparte branch/worktree op het herstelpunt of gebruik na beoordeling `git revert` van de oplevercommit; gebruik geen `reset --hard`. De aanvullende databasekolommen mogen bij terugkeer naar oude code blijven staan. Stop eerst nieuwe ITSAPI-inname en behoud de huidige database/historie. Databaseherstel alleen in een afzonderlijke herstelopstelling of na expliciete toestemming; overschrijf de actuele database niet stilzwijgend.
+TODO vóór claim “hardwaregeverifieerd”: eigen echte payloads en ACK-acceptatie, confidence-schaal, richtingsbetekenis, tijdzone en daadwerkelijk ontvangen beeldrollen bevestigen. Andere registratie-endpoints en payloadvarianten blijven expliciet niet ondersteund.

@@ -30,9 +30,9 @@ try{
  await api.inject({method:"POST",url:`/cameras/${id}/itsapi/debug`,headers,payload:{}});
  const path="/NotificationInfo/KeepAlive";
  async function digest(secret=password){const response=await receiver.inject({method:"POST",url:path});const nonce=parseDigest(String(response.headers["www-authenticate"]))!.nonce;const signature=md5(`${md5(`${username}:ANPR-ITSAPI:${secret}`)}:${nonce}:00000001:fixture:auth:${md5(`POST:${path}`)}`);return `Digest username="${username}", realm="ANPR-ITSAPI", nonce="${nonce}", uri="${path}", response="${signature}", qop=auth, nc=00000001, cnonce="fixture"`;}
- const authorization=await digest();const first=await receiver.inject({method:"POST",url:path,headers:{authorization},payload:{DeviceID:"synthetic-private",Time:"synthetic-time"}});assert.equal(first.statusCode,501,first.body);
+ const authorization=await digest();const first=await receiver.inject({method:"POST",url:path,headers:{authorization},payload:{DeviceID:"synthetic-private",Time:"synthetic-time"}});assert.equal(first.statusCode,422,first.body);
  assert.equal((await receiver.inject({method:"POST",url:path,headers:{authorization},payload:{}})).statusCode,401);
- const retries=await Promise.all(Array.from({length:2},async()=>receiver.inject({method:"POST",url:path,headers:{authorization:await digest()},payload:{DeviceID:"synthetic-private",Time:"synthetic-time"}})));assert(retries.every(r=>r.statusCode===501));
+ const retries=await Promise.all(Array.from({length:2},async()=>receiver.inject({method:"POST",url:path,headers:{authorization:await digest()},payload:{DeviceID:"synthetic-private",Time:"synthetic-time"}})));assert(retries.every(r=>r.statusCode===422));
  assert.equal(await db.itsapiInbox.count({where:{cameraId:id}}),1);
  const inbox=await db.itsapiInbox.findFirstOrThrow({where:{cameraId:id}});assert.equal(inbox.attempts,3);assert(!JSON.stringify(inbox.evidence).includes("synthetic-private"));
  const reg=await db.itsapiRegistration.findUniqueOrThrow({where:{cameraId:id}});assert(reg.lastAuthenticatedAt);assert.equal(reg.lastIdentityAt,null);assert.equal(reg.lastHeartbeatAt,null);
