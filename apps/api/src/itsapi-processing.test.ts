@@ -21,10 +21,10 @@ let db: any;
 let storage: {storePassageImage: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn>};
 beforeEach(()=>{
   let passage: any = null;
-  const camera={id:"fixture-camera",active:true,isDraft:false,archivedAt:null,configVersion:1,anprProvider:"DAHUA_ITSAPI",location:"Configured location",directionMapping:"TOWARD_CAMERA_IS_INCOMING",vpnLocation:{timezone:"Europe/Amsterdam"}};
-  const registration={cameraId:camera.id,camera,expectedDeviceId:device,protocolVersion:"V1.19",username,passwordEncrypted:encryptSecret(password)};
+  const camera={id:"fixture-camera",active:true,isDraft:false,archivedAt:null,configVersion:1,anprProvider:"DAHUA_ITSAPI",rtspHost:"192.168.178.248",location:"Configured location",directionMapping:"TOWARD_CAMERA_IS_INCOMING",vpnLocation:{timezone:"Europe/Amsterdam"}};
+  const registration={cameraId:camera.id,camera,expectedDeviceId:device,protocolVersion:"V1.19",authenticationEnabled:true,username,passwordEncrypted:encryptSecret(password)};
   db={
-    itsapiRegistration:{findUnique:vi.fn().mockResolvedValue(registration),updateMany:vi.fn().mockResolvedValue({count:1}),update:vi.fn()},
+    itsapiRegistration:{findUnique:vi.fn().mockResolvedValue(registration),findMany:vi.fn().mockResolvedValue([registration]),updateMany:vi.fn().mockResolvedValue({count:1}),update:vi.fn()},
     itsapiDigestReplay:{updateMany:vi.fn().mockResolvedValue({count:1})},
     camera:{findFirst:vi.fn().mockResolvedValue(camera),updateMany:vi.fn().mockResolvedValue({count:1}),update:vi.fn()},
     passage:{findFirst:vi.fn().mockImplementation(async()=>passage),create:vi.fn().mockImplementation(async({data})=>{passage={id:"stored-passage",...data};return passage}),update:vi.fn()},
@@ -42,7 +42,42 @@ async function upload(path: string, payload: unknown, secret = password) {
   const authorization = createDigestAuthorization({challenge:String(challenge.headers["www-authenticate"]),method:"POST",uri:path,username,password:secret});
   return app.inject({method:"POST",url:path,headers:{authorization},payload:payload as object});
 }
+const uploadWithoutAuth = (payload: unknown, remoteAddress = "192.168.178.248", headers?: Record<string,string>) => app.inject({method:"POST",url:ITSAPI_ANPR_PATH,remoteAddress,headers,payload:payload as object});
 describe("ITSAPI Picture-profiel verwerking",()=>{
+  it("laat auth-uit met juiste Device ID en vast bron-IP toe",async()=>{
+    (await db.itsapiRegistration.findUnique()).authenticationEnabled=false;
+    const response=await uploadWithoutAuth(fixture());
+    expect(response.statusCode).toBe(200);expect(response.json()).toEqual({Result:true,DeviceID:device});
+    expect(db.passage.create).toHaveBeenCalledOnce();
+    expect(db.itsapiRegistration.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({authenticationEnabled:false,camera:{rtspHost:"192.168.178.248"}}),data:expect.not.objectContaining({lastAuthenticatedAt:expect.anything()})}));
+  });
+  it("verwerkt KeepAlive zonder Digest via dezelfde Device ID- en bron-IP-controle",async()=>{
+    (await db.itsapiRegistration.findUnique()).authenticationEnabled=false;
+    const response=await app.inject({method:"POST",url:ITSAPI_HEARTBEAT_PATH,remoteAddress:"192.168.178.248",payload:{Active:"keepAlive",DeviceID:device}});
+    expect(response.statusCode).toBe(200);expect(response.json()).toEqual({Active:true,DeviceID:device});
+    expect(db.itsapiRegistration.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({authenticationEnabled:false,camera:{rtspHost:"192.168.178.248"}})}));
+  });
+  it("weigert auth-uit met onbekende Device ID",async()=>{
+    (await db.itsapiRegistration.findUnique()).authenticationEnabled=false;
+    db.itsapiRegistration.findMany.mockResolvedValue([]);
+    const body=fixture();body.Picture.SnapInfo.DeviceID="unknown-device";
+    const response=await uploadWithoutAuth(body);
+    expect(response.statusCode).toBe(403);expect(response.json().error).toBe("DEVICE_ID_UNKNOWN");expect(db.passage.create).not.toHaveBeenCalled();
+  });
+  it("weigert auth-uit vanaf een ander bron-IP",async()=>{
+    (await db.itsapiRegistration.findUnique()).authenticationEnabled=false;
+    const response=await uploadWithoutAuth(fixture(),"192.168.178.247",{"x-forwarded-for":"192.168.178.248"});
+    expect(response.statusCode).toBe(403);expect(response.json().error).toBe("SOURCE_IP_MISMATCH");expect(db.passage.create).not.toHaveBeenCalled();
+  });
+  it("blijft bij auth-aan zonder Digest een challenge geven",async()=>{
+    const response=await uploadWithoutAuth(fixture());
+    expect(response.statusCode).toBe(401);expect(response.body).toBe("");expect(response.headers["www-authenticate"]).toMatch(/^Digest /);
+    expect(db.passage.create).not.toHaveBeenCalled();
+  });
+  it("laat auth-aan met geldige Digest toe",async()=>{
+    const response=await upload(ITSAPI_ANPR_PATH,fixture());
+    expect(response.statusCode).toBe(200);expect(db.passage.create).toHaveBeenCalledOnce();
+  });
   it("verwerkt een geldige heartbeat en commit vóór ACK",async()=>{
     const response=await upload(ITSAPI_HEARTBEAT_PATH,{Active:"keepAlive",DeviceID:device});
     expect(response.statusCode).toBe(200);expect(response.json()).toEqual({Active:true,DeviceID:device});

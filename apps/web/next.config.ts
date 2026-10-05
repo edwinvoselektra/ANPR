@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The CLI checker can truncate --showConfig output under supported Node 24;
+  // the compiler API performs the same production type validation reliably.
+  experimental: { useTypeScriptCli: false },
   poweredByHeader: false,
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${process.env.API_INTERNAL_URL ?? "http://localhost:4000"}/:path*` }];

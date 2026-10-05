@@ -4,8 +4,9 @@ Een webbased ANPR-platform voor buurtpreventie. Het platform bevat veilig gebrui
 en camerabeheer, RTSP/FFmpeg-diagnose, afzonderlijke video- en ANPR-workers, Dahua
 CGI-eventinname, passage- en hitopslag, kenteken- en groepenbeheer, database-side
 zoeken, PWA/Web Push en een transparante aandachtsscore voor passagepatronen. De
-ITSAPI V1.19-ontvanger blijft diagnostisch totdat heartbeat- en passagepayloads op de
-echte firmware zijn bewezen. Live browservideo en server-side OCR zijn nog niet gebouwd.
+ITSAPI V1.19 verwerkt het ondersteunde heartbeat- en Picture-profiel, maar blijft
+hardwarematig onbevestigd totdat de ACK door de echte firmware is geaccepteerd. Live
+browservideo en server-side OCR zijn nog niet gebouwd.
 
 > **Belangrijk:** demo-passages zijn geen echte ANPR-detecties. De interface toont ze
 > altijd met bron `DEMO`.
@@ -120,12 +121,12 @@ Stop het volgen van logs met `Ctrl+C`; de containers blijven draaien.
 1. Log in als Administrator en kies **Camera’s → Camera toevoegen**.
 2. **Camera:** naam, locatie, lokaal netwerk of bestaande VPN-locatie, host en camera-inlog.
 3. **Beeld controleren:** test een nieuw gedecodeerd RTSP-frame en snapshot. Een open poort of streammetadata is onvoldoende. Verdergaan zonder beeld kan met een expliciete waarschuwing.
-4. **Kentekengegevens koppelen:** stel voor de hervatbare conceptcamera de afzonderlijke ITSAPI-uploadinlog, bestaande Device ID en het bevestigde LAN-/VPN-serveradres in.
+4. **Kentekengegevens koppelen:** stel voor de hervatbare conceptcamera het bestaande Device ID en het bevestigde LAN-/VPN-serveradres in. Kies per camera of Digest in de camera aan staat; zonder Digest is een vast camera-IP verplicht.
 5. **Praktijktest en afronden:** controleer de afzonderlijke diagnose en sla desgewenst op met openstaande tests.
 
 Afwijkende RTSP-gegevens en de bestaande transport-/zonewizard staan onder **Geavanceerd**. De bestaande CGI-eventstream blijft beschikbaar als alternatief; dit is geen ITSAPI. VPN is behouden.
 
-**ITSAPI-status:** afzonderlijke heartbeat- en TollgateInfo-handlers voor het Picture-profiel, met Device-ID/Digest-validatie, passage- en beeldopslag, bestaande watchlist/push-keten en idempotente retries. Succes-ACK volgt alleen na verwerking. PostgreSQL-integratie met synthetische uploads en push-stub getest; compatibiliteit met de fysieke camera op `192.168.178.248` en ACK-acceptatie nog niet bevestigd. Doeladres volgens de huidige gebruikerswaarneming: `192.168.178.52:7070`. Zie [ondersteunde velden, beperkingen, lokale tests en exacte uitrolcommando’s](docs/itsapi-receiver.md).
+**ITSAPI-status:** afzonderlijke heartbeat- en TollgateInfo-handlers voor het Picture-profiel, met Device-ID-validatie, optionele Digest per camera, passage- en beeldopslag, bestaande watchlist/push-keten en idempotente retries. Zonder Digest accepteert de receiver uitsluitend het geconfigureerde Device ID vanaf het vaste camera-IP; doorgestuurde IP-headers worden niet vertrouwd. Succes-ACK volgt alleen na verwerking. PostgreSQL-integratie met synthetische uploads en push-stub getest; compatibiliteit met de fysieke camera op `192.168.178.248` en ACK-acceptatie nog niet bevestigd. Doeladres volgens de huidige gebruikerswaarneming: `192.168.178.52:7070`. Zie [ondersteunde velden, beperkingen, lokale tests en exacte uitrolcommando’s](docs/itsapi-receiver.md).
 
 Camera-credentials worden met AES-256-GCM versleuteld opgeslagen. De browser krijgt
 opgeslagen credentials en volledige credential-URL's nooit terug.
@@ -458,7 +459,7 @@ Verwijderen vereist adminrechten, trekt camera- en uploadcredentials in en archi
 
 Een actieve groep met **HIT aan** geeft bij een geldig actief lid één Hit per passage, met alle matchende groepen en redenen. Er bestaat geen aanvullend individueel HIT-vinkje. Het dashboard leest Hit-records rechtstreeks, gebruikt voor teller en de laatste vijf hits dezelfde dag in **Europe/Amsterdam**, en ververst iedere drie seconden. Demo blijft meetellen zoals voorheen, met expliciete demo-aantallen en labels.
 
-De huidige echte testcamera gebruikt **DAHUA_CGI**. Laat deze werkende provider behouden. Drie samengevoegde JPEG-beelden zijn daadwerkelijk aangetroffen; de worker splitst overzicht, kenteken en voertuig volgens de ontvangen offsets en lengtes. Oude passages worden niet achteraf gewijzigd. ITSAPI V1.19 is nog een diagnostische ontvanger zonder bewezen heartbeat-/ANPR-parser of ACK.
+De bestaande CGI-koppeling blijft afzonderlijk beschikbaar. Drie samengevoegde JPEG-beelden zijn daar daadwerkelijk aangetroffen; de worker splitst overzicht, kenteken en voertuig volgens de ontvangen offsets en lengtes. Oude passages worden niet achteraf gewijzigd. De ITSAPI-parser en ACK zijn synthetisch getest; acceptatie door de echte Dahua-firmware moet nog worden bevestigd.
 
 Zie [bevindingen, regressietests en exacte praktijktest](docs/group-hit-dashboard.md).
 

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "node:crypto";
+import { isIP } from "node:net";
 import { z } from "zod";
 import { normalizeCameraHost, PERMISSIONS } from "@anpr/shared";
 import { requireAdmin, requirePermission } from "../lib/auth.js";
@@ -75,13 +76,14 @@ export async function onboardingRoutes(app: FastifyInstance) {
   });
   app.put("/cameras/:id/itsapi",{preHandler:requireAdmin()},async(request)=>{
     const {id}=params.parse(request.params);
-    const body=z.object({receiverOrigin:z.string().url(),addressConfirmed:z.literal(true),expectedDeviceId:z.string().trim().min(1).max(200),protocolVersion:z.string().trim().min(1).max(100),heartbeatSeconds:z.coerce.number().int().min(5).max(86400)}).parse(request.body);
+    const body=z.object({receiverOrigin:z.string().url(),addressConfirmed:z.literal(true),expectedDeviceId:z.string().trim().min(1).max(200),protocolVersion:z.string().trim().min(1).max(100),heartbeatSeconds:z.coerce.number().int().min(5).max(86400),authenticationEnabled:z.boolean().default(true)}).parse(request.body);
     const camera=await prisma.camera.findUniqueOrThrow({where:{id,archivedAt:null}});
+    if(!body.authenticationEnabled&&(!camera.rtspHost||!isIP(camera.rtspHost)))throw Object.assign(new Error("Authentication uit vereist een vast IP-adres in Camera-IP / hostnaam."),{statusCode:400});
     const origin=receiverOrigin(body.receiverOrigin,camera.rtspHost?normalizeCameraHost(camera.rtspHost):null);
     await prisma.$transaction(async tx=>{
       // Lock the camera before provisioning so delete cannot leave working upload credentials behind.
       await tx.camera.update({where:{id,archivedAt:null},data:{configVersion:{increment:1}}});
-      await tx.itsapiRegistration.upsert({where:{cameraId:id},create:{cameraId:id,username:`upload-${randomBytes(8).toString("hex")}`,passwordEncrypted:encryptSecret(randomBytes(24).toString("base64url"))!,receiverOrigin:origin,expectedDeviceId:body.expectedDeviceId,protocolVersion:body.protocolVersion,heartbeatSeconds:body.heartbeatSeconds},update:{receiverOrigin:origin,expectedDeviceId:body.expectedDeviceId,protocolVersion:body.protocolVersion,heartbeatSeconds:body.heartbeatSeconds,lastErrorCode:null}});
+      await tx.itsapiRegistration.upsert({where:{cameraId:id},create:{cameraId:id,username:`upload-${randomBytes(8).toString("hex")}`,passwordEncrypted:encryptSecret(randomBytes(24).toString("base64url"))!,receiverOrigin:origin,expectedDeviceId:body.expectedDeviceId,protocolVersion:body.protocolVersion,heartbeatSeconds:body.heartbeatSeconds,authenticationEnabled:body.authenticationEnabled},update:{receiverOrigin:origin,expectedDeviceId:body.expectedDeviceId,protocolVersion:body.protocolVersion,heartbeatSeconds:body.heartbeatSeconds,authenticationEnabled:body.authenticationEnabled,lastErrorCode:null}});
     });
     await audit(request,"ITSAPI_REGISTRATION_CONFIGURED",{objectType:"Camera",objectId:id});
     return {success:true,message:"Uploadinstellingen opgeslagen. Wachten op geverifieerd protocol en cameraberichten."};

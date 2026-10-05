@@ -723,6 +723,7 @@ model ItsapiRegistration {
   protocolVersion      String?
   receiverOrigin       String?
   heartbeatSeconds     Int      @default(300)
+  authenticationEnabled Boolean @default(true)
   debugUntil           DateTime?
   lastRequestAt        DateTime?
   lastAuthenticatedAt  DateTime?
