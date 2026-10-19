@@ -11,7 +11,7 @@ vi.mock("@/lib/api", () => ({
   formatDate: () => "Nog niet"
 }));
 
-import Simulator from "./page";
+import Simulator from "./Simulator";
 
 const UDDEL = { id: "11111111-1111-4111-8111-111111111111", name: "Uddel Noord", location: "Uddel Noord" };
 const CUSTOM = { id: "22222222-2222-4222-8222-222222222222", name: "Eigen Camera Dorp", location: "Dorpstraat 1" };

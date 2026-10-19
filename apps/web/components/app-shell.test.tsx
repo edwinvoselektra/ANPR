@@ -47,6 +47,17 @@ describe("ADMIN-navigatie", () => {
     expect(link.getAttribute("href")).toBe("/users");
   });
 
+  it("toont geen simulatorlink, ook niet met simulatorrechten", async () => {
+    apiMock.mockResolvedValue({ user: { id: "admin", displayName: "Beheerder", username: "admin", roles: ["Administrator"], permissions: Object.values(PERMISSIONS) } });
+    render(<AppShell><div>Inhoud</div></AppShell>);
+    await screen.findByText("Inhoud");
+    expect(screen.queryByRole("link", { name: /Demo|simulator/i })).toBeNull();
+    expect(document.querySelector('a[href="/simulator"]')).toBeNull();
+    for (const name of ["Dashboard", "Live passages", "Hits", "Zoeken", "Kentekens", "Groepen", "Camera’s", "Locaties", "Gebruikers", "Systeemstatus", "Instellingen"]) {
+      expect(screen.getByRole("link", { name })).toBeTruthy();
+    }
+  });
+
   it("toont de geactiveerde analysepagina's zonder label Later", async () => {
     apiMock.mockResolvedValue({
       user: {

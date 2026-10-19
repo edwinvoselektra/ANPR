@@ -9,7 +9,7 @@ import { api, formatDate } from "@/lib/api";
 import { AttentionBadge, AttentionPanel } from "@/components/AttentionPanel";
 
 type Passage={id:string;displayLicensePlate:string;normalizedLicensePlate:string;plateConfidence?:number|null;plateCountry?:string|null;timestamp:string;timeZone?:string;location:string;direction:string;vehicleColor:string;vehicleType:string;vehicleBrand?:string|null;lane?:number|null;source:string;vehicleImage1ObjectId?:string|null;vehicleImage2ObjectId?:string|null;plateImageObjectId?:string|null;camera:{name:string;location:string};attentionSnapshot?:{score:number;confidence:"LOW"|"MEDIUM"|"HIGH"}|null};
-const labels:Record<string,string>={INCOMING:"Inkomend",OUTGOING:"Uitgaand",UNKNOWN:"Onbekend",BOTH:"Onbekend",DAHUA_CAMERA:"Dahua camera-ANPR",DEMO:"DEMO / simulator",SERVER_OCR:"Server-OCR",ANPR:"ANPR",MANUAL:"Handmatig"};
+const labels:Record<string,string>={INCOMING:"Inkomend",OUTGOING:"Uitgaand",UNKNOWN:"Onbekend",BOTH:"Onbekend",DAHUA_CAMERA:"Dahua camera-ANPR",DEMO:"DEMO",SERVER_OCR:"Server-OCR",ANPR:"ANPR",MANUAL:"Handmatig"};
 
 export default function PassageDetail(){
   const{id}=useParams<{id:string}>();const[data,setData]=useState<Passage>();const[error,setError]=useState("");

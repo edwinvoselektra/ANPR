@@ -17,6 +17,8 @@ const schema = z.object({
 });
 
 export async function simulatorRoutes(app: FastifyInstance) {
+  // Development API only, even when DEMO_MODE is accidentally enabled in production.
+  if (config.NODE_ENV === "production") return;
   app.get("/simulator", { preHandler: requirePermission(PERMISSIONS.SIMULATOR_RUN) }, async () => ({
     enabled: config.DEMO_MODE,
     // Dynamisch uit de echte cameradatabase: elke actieve camera is beschikbaar, ook

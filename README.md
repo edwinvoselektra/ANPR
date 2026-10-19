@@ -141,23 +141,22 @@ Veelvoorkomende RTSP-fouten:
 - **Stream/path fout:** controleer het merk/model-specifieke RTSP-pad.
 - **Timeout:** de camera reageert niet binnen 12–15 seconden.
 
-## Demo/simulator testen
+## Interne simulator en tests
 
-1. Log in als Administrator of Operator.
-2. Open **Demo / simulator**.
-3. Selecteer een actieve echte of demo-camera uit de database.
-4. Kies kenteken, voertuigkleur, voertuigtype, rijrichting en eventueel een tijdstip.
-5. Gebruik `12-ABC-3` om met de standaard demo-data een DEMO-hit te maken.
-6. Klik **DEMO-passage genereren**.
-7. Controleer **Live passages**, **Hits**, **Dashboard**, **Zoeken** en het dossier.
+De publieke frontendroute `/simulator` is verwijderd en staat niet in de navigatie. Rechtstreeks openen geeft 404. Het Dashboard bevat geen algemene demo-/testbanner. Bestaande demoregistraties blijven uitsluitend bij die records als DEMO herkenbaar; gegevens en berekeningen worden niet verwijderd of gefilterd.
 
-De simulator analyseert geen beeld en doet geen claim van echte herkenning.
+De simulatorcomponent en fixtures blijven onder `apps/web/components/development` beschikbaar voor automated tests:
+
+```bash
+npm run test -w @anpr/web -- components/development/Simulator.test.tsx
+```
+
+De API-routes `GET /simulator` en `POST /simulator/passages` bestaan alleen buiten `NODE_ENV=production`. In development vereist genereren daarnaast `DEMO_MODE=true` en de bestaande simulatorrechten. In productie zijn beide routes afwezig, ook wanneer DEMO_MODE per ongeluk aan staat. De simulator analyseert geen beeld en bewijst geen echte ANPR-detectie. Zie [UI-opschoning en lokaal testplan](docs/production-ui-cleanup.md).
 
 ## Gebruikers, rollen en sessies
 
 - Administrator beheert gebruikers, camera's en systeemstatus.
-- Operator kan passages/hits zien, kentekens en groepen beheren en de
-  simulator bedienen, maar geen kritieke instellingen wijzigen.
+- Operator kan passages/hits zien en kentekens en groepen beheren, maar geen kritieke instellingen wijzigen.
 - Viewer heeft alleen leesrechten en wordt server-side geweigerd bij beheeracties.
 - Na vijf foute wachtwoorden wordt een account 15 minuten geblokkeerd.
 - **Uitloggen op alle apparaten** is via de API aanwezig; een profielpagina volgt later.
@@ -224,7 +223,7 @@ De logs tonen geen wachtwoord en redigeren kentekens. Stop volgen met `Ctrl+C`.
 3. Open **Kentekens**, voeg `12-ABC-3` toe, kies de groep en vul een reden in.
 4. Eén kenteken kan aan meerdere groepen worden gekoppeld. Spaties en streepjes worden
    voor vergelijking verwijderd; er worden geen gokcorrecties voor O/0 of I/1 gedaan.
-5. Gebruik de simulator of laat een echte Dahua-passage binnenkomen. Een actieve,
+5. Laat een echte Dahua-passage binnenkomen (of gebruik uitsluitend in development de interne simulator-API). Een actieve,
    geldige match maakt automatisch precies één hit per opgeslagen passage.
 6. Open **Hits** voor de nieuwste hits en klik door naar alle details en foto's.
 7. Open **Zoeken** om kenteken, kleur, type, camera, locatie, datum, tijd, groep, hit en
@@ -278,8 +277,7 @@ iPhone/iPad (iOS/iPadOS 16.4 of nieuwer) open je de site in Safari, kies je **De
 meldingen in. Buiten `localhost` vereisen PWA en Web Push een geldige HTTPS-verbinding;
 een onbeveiligd lokaal IP-adres is daarvoor niet voldoende.
 
-Een simulatorhit gebruikt hetzelfde centrale pushpad als een Dahua-hit. Test dit door
-een actief signaleringskenteken te simuleren en binnen enkele seconden de hitmelding
+Een simulatorhit uit de interne development-API gebruikt hetzelfde centrale pushpad als een Dahua-hit. Test productie met een nieuwe echte passage van een actief signaleringskenteken en controleer binnen enkele seconden de hitmelding
 op ieder ingeschakeld apparaat te controleren. De melding bevat geen afbeelding of
 credentials en opent de beveiligde hitdetailpagina. Meldingsinhoud kan zichtbaar zijn
 op het vergrendelscherm; stel de privacy daarvan op het apparaat naar wens in.
@@ -459,7 +457,7 @@ Verwijderen vereist adminrechten, trekt camera- en uploadcredentials in en archi
 
 ### Groepshits, dashboard en gebeurtenisbeelden
 
-Een actieve groep met **HIT aan** geeft bij een geldig actief lid één Hit per passage, met alle matchende groepen en redenen. Er bestaat geen aanvullend individueel HIT-vinkje. Het dashboard leest Hit-records rechtstreeks, gebruikt voor teller en de laatste vijf hits dezelfde dag in **Europe/Amsterdam**, en ververst iedere drie seconden. Demo blijft meetellen zoals voorheen, met expliciete demo-aantallen en labels.
+Een actieve groep met **HIT aan** geeft bij een geldig actief lid één Hit per passage, met alle matchende groepen en redenen. Er bestaat geen aanvullend individueel HIT-vinkje. Het dashboard leest Hit-records rechtstreeks, gebruikt voor teller en de laatste vijf hits dezelfde dag in **Europe/Amsterdam**, en ververst iedere drie seconden. Demo blijft meetellen zoals voorheen; bestaande demo-records houden hun bronlabels, maar de algemene demo-tellerbanner is verwijderd.
 
 De bestaande CGI-koppeling blijft afzonderlijk beschikbaar. Drie samengevoegde JPEG-beelden zijn daar daadwerkelijk aangetroffen; de worker splitst overzicht, kenteken en voertuig volgens de ontvangen offsets en lengtes. Oude passages worden niet achteraf gewijzigd. De ITSAPI-parser en ACK zijn synthetisch getest; acceptatie door de echte Dahua-firmware moet nog worden bevestigd.
 

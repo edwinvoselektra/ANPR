@@ -15,6 +15,7 @@ describe("inloggen onthouden",()=>{
   it("is standaard ingeschakeld en stuurt alleen credentials naar de login-API",async()=>{
     const storageSpy=vi.spyOn(Storage.prototype,"setItem");
     render(<LoginPage/>);
+    expect(screen.queryByText(/demosimulator|ontwikkelomgeving/i)).toBeNull();
     expect((screen.getByRole("checkbox",{name:"Inloggegevens onthouden"}) as HTMLInputElement).checked).toBe(true);
     fireEvent.change(screen.getByLabelText("E-mail of gebruikersnaam"),{target:{value:"beheerder"}});
     fireEvent.change(screen.getByLabelText("Wachtwoord"),{target:{value:"tijdelijk-geheim"}});

@@ -9,6 +9,14 @@ import Dashboard from "./page";
 const base={counters:{cameraTotal:1,cameraOnline:1,passagesToday:0,hitsToday:0,watchedPlates:1,demoPassagesToday:0,demoHitsToday:0},recentPassages:[],recentHits:[],cameraProblems:[]};
 afterEach(()=>{cleanup();vi.useRealTimers();vi.clearAllMocks()});
 describe("dashboard polling en historische hitcontext",()=>{
+ it("toont geen testbanner en behoudt de ontvangen tellingen",async()=>{
+  mock.mockResolvedValue({...base,counters:{...base.counters,passagesToday:12,hitsToday:3,demoPassagesToday:2,demoHitsToday:1}});
+  render(<Dashboard/>);await act(async()=>{});
+  expect(screen.queryByText(/Tellingen bevatten echte en DEMO-data/)).toBeNull();
+  expect(screen.queryByText(/demopassages|demo-hits|Daggrens:/)).toBeNull();
+  expect(screen.getByText("Passages vandaag").parentElement?.textContent).toBe("Passages vandaag12");
+  expect(screen.getByText("Hits vandaag").parentElement?.textContent).toBe("Hits vandaag3");
+ });
  it("ververst alle tegels en lijsten na een nieuwe groepshit en stopt bij unmount",async()=>{
   vi.useFakeTimers();mock.mockResolvedValueOnce(base).mockResolvedValue({...base,counters:{...base.counters,passagesToday:1,hitsToday:1},recentPassages:[{id:"p1",displayLicensePlate:"TEST12",camera:{name:"Fixture"},source:"DAHUA_CAMERA"}],recentHits:[{id:"h1",normalizedLicensePlate:"TEST12",camera:{name:"Fixture"},passage:{displayLicensePlate:"TEST12",source:"DAHUA_CAMERA"},groups:[{id:"g1",name:"Aandacht",reason:"Reden één"},{id:"g2",name:"PRIO",reason:"Reden twee"},{id:"g3",name:"Extra",reason:"Reden drie"}]}]});
   const view=render(<Dashboard/>);await act(async()=>{});expect(screen.getByText("Vandaag nog geen hits.")).toBeTruthy();

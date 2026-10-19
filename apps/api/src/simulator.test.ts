@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
+import { config } from "./config.js";
+import { simulatorRoutes } from "./routes/simulator.js";
 
 // DEMO_MODE moet gezet zijn vóórdat config.ts geladen wordt; vi.hoisted draait vóór de imports.
 vi.hoisted(() => { process.env.DEMO_MODE = "true"; });
@@ -124,5 +126,21 @@ describe("simulator camerakeuze", () => {
 
     expect(response.statusCode).toBe(201);
     expect(prismaMock.passage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ timestamp: new Date(timestamp), direction: "OUTGOING", cameraId: CAMERA_ID }) });
+  });
+});
+
+
+describe("simulator uitgesloten van productie", () => {
+  it.each(["GET", "POST"] as const)("registreert %s niet, ook niet met DEMO_MODE=true", async method => {
+    const previous = config.NODE_ENV;
+    try {
+      config.NODE_ENV = "production";
+      app = Fastify();
+      await app.register(simulatorRoutes);
+      const response = await app.inject({method,url:method === "GET" ? "/simulator" : "/simulator/passages"});
+      expect(response.statusCode).toBe(404);
+      expect(prismaMock.camera.findMany).not.toHaveBeenCalled();
+      expect(prismaMock.passage.create).not.toHaveBeenCalled();
+    } finally { config.NODE_ENV = previous; }
   });
 });
