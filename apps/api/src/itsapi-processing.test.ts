@@ -91,11 +91,11 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
     const response=await upload(ITSAPI_ANPR_PATH,fixture());
     expect(response.statusCode).toBe(200);expect(response.json()).toEqual({Result:true,DeviceID:device});
     expect(response.headers["content-type"]).toBe("application/json; charset=utf-8");
-    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({normalizedLicensePlate:"TEST123",timestamp:new Date("2026-10-16T08:00:00.000Z"),vehicleType:"CAR",vehicleColor:"BLUE",direction:"INCOMING",location:"Testlocatie",plateConfidence:0.8,vehicleImage1ObjectId:expect.any(String),plateImageObjectId:expect.any(String),vehicleImage2ObjectId:expect.any(String)})});
+    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({normalizedLicensePlate:"TEST123",timestamp:new Date("2026-10-02T11:24:56.123Z"),vehicleType:"CAR",vehicleColor:"BLUE",direction:"INCOMING",location:"Testlocatie",plateConfidence:0.8,vehicleImage1ObjectId:expect.any(String),plateImageObjectId:expect.any(String),vehicleImage2ObjectId:expect.any(String)})});
     expect(db.attentionAnalysisJob.create).toHaveBeenCalledOnce();
     expect(storage.storePassageImage).toHaveBeenCalledOnce();
   });
-  it("legt ontvangst vast vóór authenticatie en bewaart de fout ingestelde cameratijd apart",async()=>{
+  it("gebruikt eventtijd ondanks uploadvertraging en bewaart ontvangst vóór authenticatie apart",async()=>{
     const lookup=db.itsapiRegistration.findUnique.getMockImplementation();
     db.itsapiRegistration.findUnique.mockImplementation(async(...args: unknown[])=>{
       vi.setSystemTime(new Date("2026-10-16T08:02:00.000Z"));
@@ -104,9 +104,29 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
     const response=await upload(ITSAPI_ANPR_PATH,fixture());
     expect(response.statusCode).toBe(200);
     expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({
-      timestamp:new Date("2026-10-16T08:00:00.000Z"),
-      rawEventMetadata:expect.objectContaining({timeSource:"SERVER_RECEIPT",receivedAt:"2026-10-16T08:00:00.000Z",cameraReportedAt:"2026-10-02T11:24:56.123Z",cameraTimeSource:"AccurateTime"}),
+      timestamp:new Date("2026-10-02T11:24:56.123Z"),
+      rawEventMetadata:expect.objectContaining({timeSource:"AccurateTime",receivedAt:"2026-10-16T08:00:00.000Z",cameraReportedAt:"2026-10-02T11:24:56.123Z",cameraTimeSource:"AccurateTime"}),
     })});
+  });
+  it.each([
+    ["2026-07-14 07:30:00.123", "2026-07-14T05:30:00.123Z"],
+    ["2026-01-14 07:30:00.123", "2026-01-14T06:30:00.123Z"],
+    ["2026-07-14T07:30:00.123", "2026-07-14T05:30:00.123Z"],
+    ["2026-07-14T07:30:00.123+02:00", "2026-07-14T05:30:00.123Z"],
+    ["2026-07-14T05:30:00.123Z", "2026-07-14T05:30:00.123Z"],
+  ])("bewaart eventtijd %s precies één keer omgerekend", async (input, utc) => {
+    const body = fixture(); body.Picture.SnapInfo.AccurateTime = input;
+    db.plateGroupMember.findMany.mockResolvedValue([{groupId:"group",reason:"test",group:{id:"group",name:"Testlijst"}}]);
+    expect((await upload(ITSAPI_ANPR_PATH, body)).statusCode).toBe(200);
+    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({timestamp:new Date(utc),timezone:"Europe/Amsterdam"})});
+    expect(db.hit.create).toHaveBeenCalledWith({data:expect.objectContaining({timestamp:new Date(utc)})});
+    expect(db.plateGroupMember.findMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({AND:expect.arrayContaining([{OR:[{validFrom:null},{validFrom:{lte:new Date(utc)}}]}])})}));
+  });
+  it("valt bij ongeldige AccurateTime terug op geldige SnapTime", async () => {
+    const body = fixture(); body.Picture.SnapInfo.AccurateTime = "invalid";
+    Object.assign(body.Picture.SnapInfo, { SnapTime: "2026-01-14 07:30:00" });
+    expect((await upload(ITSAPI_ANPR_PATH, body)).statusCode).toBe(200);
+    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({timestamp:new Date("2026-01-14T06:30:00Z"),rawEventMetadata:expect.objectContaining({timeSource:"SnapTime"})})});
   });
   it("herkent retries ondanks gewijzigde uploadteller zonder dubbele passage/hit/pushjob",async()=>{
     db.plateGroupMember.findMany.mockResolvedValue([{groupId:"group",reason:"test",group:{id:"group",name:"Testlijst"}}]);
@@ -117,7 +137,7 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
     expect(db.passage.create).toHaveBeenCalledOnce();expect(db.hit.create).toHaveBeenCalledOnce();
     expect(db.hit.create).toHaveBeenCalledWith({data:expect.objectContaining({notificationStatus:"PENDING",passageId:"stored-passage"})});
     expect(db.attentionAnalysisJob.create).toHaveBeenCalledOnce();
-    expect(db.passage.create.mock.calls[0][0].data.timestamp).toEqual(new Date("2026-10-16T08:00:00.000Z"));
+    expect(db.passage.create.mock.calls[0][0].data.timestamp).toEqual(new Date("2026-10-02T11:24:56.123Z"));
     expect(db.passage.update).not.toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({timestamp:expect.any(Date)})}));
     const eventKeys=db.passage.findFirst.mock.calls.map(([args]: [{where:{sourceEventId:string}}])=>args.where.sourceEventId);
     expect(new Set(eventKeys).size).toBe(1);

@@ -129,8 +129,8 @@ export async function plateRoutes(app: FastifyInstance) {
     const [members, count, first, last, observations, cameras, colors, types] = await Promise.all([
       prisma.plateGroupMember.findMany({ where: { normalizedLicensePlate: normalized }, include: memberInclude, orderBy: { group: { name: "asc" } } }),
       prisma.passage.count({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } } }),
-      prisma.passage.findFirst({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, orderBy: { timestamp: "asc" }, select: { timestamp: true } }),
-      prisma.passage.findFirst({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, orderBy: { timestamp: "desc" }, select: { timestamp: true, displayLicensePlate: true } }),
+      prisma.passage.findFirst({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, orderBy: { timestamp: "asc" }, select: { timestamp: true, timezone: true, camera: { select: { name: true, vpnLocation: { select: { timezone: true } } } } } }),
+      prisma.passage.findFirst({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, orderBy: { timestamp: "desc" }, select: { timestamp: true, timezone: true, camera: { select: { name: true, vpnLocation: { select: { timezone: true } } } }, displayLicensePlate: true } }),
       prisma.passage.findMany({ where: { normalizedLicensePlate: normalized, status: { not: "DELETED" } }, orderBy: [{ timestamp: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.limit, take: query.limit, select: {
         id: true, timestamp: true, timezone: true, displayLicensePlate: true, vehicleColor: true, vehicleType: true,
         vehicleImage1ObjectId: true, plateImageObjectId: true, source: true, direction: true,
@@ -148,8 +148,56 @@ export async function plateRoutes(app: FastifyInstance) {
       },
       observations: observations.map(historicalCamera), page: query.page, limit: query.limit, total: count,
       firstSeenAt: first?.timestamp ?? null, lastSeenAt: last?.timestamp ?? null,
+      firstSeenTimeZone: first ? historicalCamera(first).timeZone : undefined,
+      lastSeenTimeZone: last ? historicalCamera(last).timeZone : undefined,
       cameras: cameras.map((item) => historicalCamera(item).camera), colors: colors.map((item) => item.vehicleColor), types: types.map((item) => item.vehicleType)
     };
+  });
+
+  // Membership actions are independent: adding one group never overwrites others.
+  app.get("/plates/:normalized/groups", { preHandler: requirePermission(PERMISSIONS.PASSAGES_VIEW) }, async (request, reply) => {
+    const { normalized } = plateParams.parse(request.params);
+    const [groups, memberships] = await Promise.all([
+      prisma.plateGroup.findMany({ where: { active: true }, select: groupSelect, orderBy: { name: "asc" } }),
+      prisma.plateGroupMember.findMany({ where: { normalizedLicensePlate: normalized }, include: { group: { select: groupSelect } }, orderBy: { group: { name: "asc" } } })
+    ]);
+    return reply.header("Cache-Control", "private, no-store").send({ groups, memberships: memberships.map(member => ({
+      group: member.group, active: member.active, reason: member.reason, validFrom: member.validFrom, validUntil: member.validUntil
+    })) });
+  });
+
+  app.put("/plates/:normalized/groups/:groupId", { preHandler: requirePermission(PERMISSIONS.PLATES_MANAGE) }, async (request, reply) => {
+    const { normalized, groupId } = plateParams.extend({ groupId: z.string().uuid() }).parse(request.params);
+    const body = z.object({ reason: z.string().trim().max(1000).nullish() }).parse(request.body ?? {});
+    const result = await prisma.$transaction(async (tx) => {
+      const group = await tx.plateGroup.findUnique({ where: { id: groupId }, select: groupSelect });
+      if (!group?.active) return "GROUP_NOT_ACTIVE" as const;
+      if (reasonMissing([group], body.reason)) return "REASON_REQUIRED" as const;
+      const created = await tx.plateGroupMember.createMany({ data: [{
+        groupId, normalizedLicensePlate: normalized, displayLicensePlate: displayLicensePlate(normalized),
+        reason: body.reason || null, active: true, addedById: request.authUser!.id
+      }], skipDuplicates: true });
+      if (created.count) await tx.auditLog.create({ data: {
+        actorId: request.authUser!.id, ipAddress: request.ip, action: "PLATE_ADDED_TO_GROUP",
+        objectType: "PlateGroupMember", objectId: normalized, metadata: { groupId }
+      } });
+      return "OK" as const;
+    });
+    if (result === "GROUP_NOT_ACTIVE") return reply.code(400).send({ error: result, message: "Kies een bestaande actieve groep." });
+    if (result === "REASON_REQUIRED") return reply.code(400).send({ error: result, message: "Vul een reden in voor een signaleringsgroep." });
+    return reply.code(204).send();
+  });
+
+  app.delete("/plates/:normalized/groups/:groupId", { preHandler: requirePermission(PERMISSIONS.PLATES_MANAGE) }, async (request, reply) => {
+    const { normalized, groupId } = plateParams.extend({ groupId: z.string().uuid() }).parse(request.params);
+    await prisma.$transaction(async (tx) => {
+      const removed = await tx.plateGroupMember.deleteMany({ where: { normalizedLicensePlate: normalized, groupId } });
+      if (removed.count) await tx.auditLog.create({ data: {
+        actorId: request.authUser!.id, ipAddress: request.ip, action: "PLATE_REMOVED_FROM_GROUP",
+        objectType: "PlateGroupMember", objectId: normalized, metadata: { groupId }
+      } });
+    });
+    return reply.code(204).send();
   });
 
   app.patch("/plates/:normalized", { preHandler: requirePermission(PERMISSIONS.PLATES_MANAGE) }, async (request, reply) => {

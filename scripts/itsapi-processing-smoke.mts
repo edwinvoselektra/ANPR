@@ -39,8 +39,10 @@ try {
  assert.equal(await db.hit.count({where:{cameraId}}),1);
  const receiptEnd=new Date();
  const passage=await db.passage.findFirstOrThrow({where:{cameraId}});
- assert(passage.timestamp>=receiptStart&&passage.timestamp<=receiptEnd);
- assert.equal((passage.rawEventMetadata as Record<string,unknown>).timeSource,"SERVER_RECEIPT");
+ assert.equal(passage.timestamp.toISOString(),"2026-10-02T11:24:56.123Z");
+ const receivedAt=new Date((passage.rawEventMetadata as Record<string,string>).receivedAt);
+ assert(receivedAt>=receiptStart&&receivedAt<=receiptEnd);
+ assert.equal((passage.rawEventMetadata as Record<string,unknown>).timeSource,"AccurateTime");
  assert.equal((passage.rawEventMetadata as Record<string,unknown>).cameraReportedAt,"2026-10-02T11:24:56.123Z");
  assert(passage.vehicleImage1ObjectId&&passage.plateImageObjectId&&passage.vehicleImage2ObjectId);
  for(const id of [passage.vehicleImage1ObjectId,passage.plateImageObjectId,passage.vehicleImage2ObjectId])assert((await readFile(resolve(root,id))).equals(jpeg));
@@ -66,7 +68,7 @@ try {
  assert(enriched.vehicleImage1ObjectId&&enriched.plateImageObjectId&&enriched.vehicleImage2ObjectId);
  assert.equal(await db.hit.count({where:{cameraId}}),2);
  assert.equal((await send(tollgate,{Unexpected:{}})).statusCode,422);
- console.log("PASS: server receipt timestamp, matching hit time, stable time on retry/late images, heartbeat, Device ID, Digest, concurrent retry deduplication, three images, optional fields, late images, one push per hit despite camera retry. Synthetic fixtures; no hardware claim.");
+ console.log("PASS: camera event timestamp, independent receipt timestamp, matching hit time, stable time on retry/late images, heartbeat, Device ID, Digest, concurrent retry deduplication, three images, optional fields, late images, one push per hit despite camera retry. Synthetic fixtures; no hardware claim.");
 } finally {
  await app.close();
  await db.passage.deleteMany({where:{cameraId}});

@@ -55,13 +55,17 @@ export function parseItsapiTollgate(body: unknown, camera: { id: string; timezon
   const p = result.data.Picture, snap = p.SnapInfo;
   const normalizedPlate = normalizeLicensePlate(p.Plate.PlateNumber);
   if (p.Plate.IsExist === false || normalizedPlate.length < 2 || normalizedPlate.length > 20) throw new ItsapiPayloadError("INVALID_PLATE");
-  // Camera time identifies retries only. PassageService records server receipt time.
-  // Preserve milliseconds and the existing event key across this change.
-  const rawTime = snap.AccurateTime || snap.SnapTime;
-  const fraction = rawTime?.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.(\d{1,3})$/);
-  const baseTime = parseCameraTime(fraction?.[1] ?? rawTime ?? undefined, camera.timezone);
-  if (!baseTime || !Number.isFinite(baseTime.getTime())) throw new ItsapiPayloadError("INVALID_EVENT_TIME", ["Picture.SnapInfo.AccurateTime or SnapTime (unambiguous camera-local time)"]);
-  const occurredAt = new Date(baseTime.getTime() + (fraction ? Number(fraction[2]!.padEnd(3, "0")) : 0));
+  // AccurateTime is the existing Picture profile's subsecond capture time;
+  // SnapTime is its second-precision fallback. Keep the event-key input stable.
+  const parseTime = (value: string | null | undefined) => {
+    const fraction = value?.match(/^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})\.(\d{1,3})$/);
+    const base = parseCameraTime(fraction?.[1] ?? value ?? undefined, camera.timezone);
+    return base && Number.isFinite(base.getTime())
+      ? new Date(base.getTime() + (fraction ? Number(fraction[2]!.padEnd(3, "0")) : 0)) : undefined;
+  };
+  const accurateTime = parseTime(snap.AccurateTime);
+  const occurredAt = accurateTime ?? parseTime(snap.SnapTime);
+  if (!occurredAt) throw new ItsapiPayloadError("INVALID_EVENT_TIME", ["Picture.SnapInfo.AccurateTime or SnapTime (unambiguous camera-local time)"]);
   const direction = snap.Direction?.trim().toLowerCase();
   // Forward/reverse are retained as metadata: their relation to the configured road
   // direction is not established. Only explicit approach/away values are mapped.
@@ -80,7 +84,7 @@ export function parseItsapiTollgate(body: unknown, camera: { id: string; timezon
     lane: snap.LanNo ?? undefined, location: snap.SnapAddress || undefined,
     overviewImage: decodeImage(p.NormalPic), plateImage: decodeImage(p.CutoutPic), extraImage: decodeImage(p.VehiclePic),
     rawMetadata: { provider:"DAHUA_ITSAPI", profile:"picture-v1", timeZone:camera.timezone,
-      timeSource:snap.AccurateTime ? "AccurateTime" : "SnapTime", confidenceScale:255,
+      timeSource:accurateTime ? "AccurateTime" : "SnapTime", confidenceScale:255,
       ...(snap.Direction ? { rawDirection:snap.Direction } : {}),
     },
   } };

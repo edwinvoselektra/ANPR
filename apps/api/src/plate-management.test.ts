@@ -23,7 +23,7 @@ const group=(id=GROUP_1,name="Aandacht")=>({id,name,color:"#dc2626",icon:null,ac
 const member=(groupValue=group())=>({id:"33333333-3333-4333-8333-333333333333",groupId:groupValue.id,normalizedLicensePlate:"12ABC3",displayLicensePlate:"12-ABC-3",description:"Test",note:null,reason:"Testreden",active:true,validFrom:null,validUntil:null,createdAt:new Date(),updatedAt:new Date(),addedBy:{id:"99999999-9999-4999-8999-999999999999",displayName:"Tester"},group:groupValue});
 let app:FastifyInstance|undefined;
 
-beforeEach(()=>{vi.clearAllMocks();authState.permissions=[PERMISSIONS.PASSAGES_VIEW,PERMISSIONS.PLATES_MANAGE];prismaMock.$transaction.mockImplementation(async(value:any)=>typeof value==="function"?value({plateGroupMember:prismaMock.plateGroupMember}):Promise.all(value));prismaMock.auditLog.create.mockResolvedValue({});prismaMock.plateGroup.findMany.mockResolvedValue([group()]);prismaMock.plateGroup.findFirst.mockResolvedValue(null);prismaMock.plateGroupMember.findFirst.mockResolvedValue(null);prismaMock.plateGroupMember.findMany.mockResolvedValue([member()]);});
+beforeEach(()=>{vi.clearAllMocks();authState.permissions=[PERMISSIONS.PASSAGES_VIEW,PERMISSIONS.PLATES_MANAGE];prismaMock.$transaction.mockImplementation(async(value:any)=>typeof value==="function"?value(prismaMock):Promise.all(value));prismaMock.auditLog.create.mockResolvedValue({});prismaMock.plateGroup.findMany.mockResolvedValue([group()]);prismaMock.plateGroup.findFirst.mockResolvedValue(null);prismaMock.plateGroupMember.findFirst.mockResolvedValue(null);prismaMock.plateGroupMember.findMany.mockResolvedValue([member()]);});
 afterEach(async()=>{await app?.close();app=undefined});
 
 describe("kentekenbeheer",()=>{
@@ -41,4 +41,51 @@ describe("groepenbeheer",()=>{
   it("laat een ADMIN een bestaande seed/demo-groep volledig wijzigen en haalt de opgeslagen waarden opnieuw op",async()=>{const changed={...group(),name:"Aandacht gewijzigd",description:"Nieuwe omschrijving",color:"#123456",icon:null,active:false,hitEnabled:false,reasonRequired:false};prismaMock.plateGroup.findUnique.mockResolvedValue(group());prismaMock.plateGroup.update.mockResolvedValue(changed);app=buildServer();const update=await app.inject({method:"PATCH",url:`/plate-groups/${GROUP_1}`,payload:{name:changed.name,description:changed.description,color:changed.color,icon:"",active:false,hitEnabled:false,reasonRequired:false}});expect(update.statusCode).toBe(200);expect(prismaMock.plateGroup.update).toHaveBeenCalledWith(expect.objectContaining({where:{id:GROUP_1},data:expect.objectContaining({name:changed.name,description:changed.description,color:changed.color,icon:null,active:false,hitEnabled:false,reasonRequired:false})}));prismaMock.plateGroup.findMany.mockResolvedValue([changed]);const fetched=await app.inject({method:"GET",url:"/plate-groups"});expect(fetched.statusCode).toBe(200);expect(fetched.json().groups[0]).toMatchObject({name:changed.name,active:false,hitEnabled:false,reasonRequired:false})});
   it("weigert een Viewer een bestaande groep via de directe API te wijzigen",async()=>{authState.permissions=[PERMISSIONS.PASSAGES_VIEW];app=buildServer();const response=await app.inject({method:"PATCH",url:`/plate-groups/${GROUP_1}`,payload:{name:"Verboden wijziging"}});expect(response.statusCode).toBe(403);expect(prismaMock.plateGroup.update).not.toHaveBeenCalled()});
   it("deactiveert een groep met hithistorie zonder historie te verwijderen",async()=>{prismaMock.plateGroup.findUnique.mockResolvedValue(group());prismaMock.hit.count.mockResolvedValue(1);prismaMock.plateGroup.update.mockResolvedValue(group());prismaMock.plateGroupMember.updateMany.mockResolvedValue({count:1});app=buildServer();const response=await app.inject({method:"DELETE",url:`/plate-groups/${GROUP_1}`});expect(response.statusCode).toBe(200);expect(response.json().deactivated).toBe(true);expect(prismaMock.plateGroup.delete).not.toHaveBeenCalled()});
+});
+
+
+describe("groepskoppeling vanuit een waargenomen kenteken", () => {
+  beforeEach(() => {
+    prismaMock.plateGroup.findUnique.mockResolvedValue(group());
+    prismaMock.plateGroupMember.createMany.mockResolvedValue({count:1});
+    prismaMock.plateGroupMember.deleteMany.mockResolvedValue({count:1});
+  });
+  it("maakt een genormaliseerde koppeling zonder ander kentekenbeheer te overschrijven", async () => {
+    app=buildServer();
+    const response=await app.inject({method:"PUT",url:`/plates/12-abc-3/groups/${GROUP_1}`,payload:{reason:"Testreden"}});
+    expect(response.statusCode).toBe(204);
+    expect(prismaMock.plateGroupMember.createMany).toHaveBeenCalledWith({data:[expect.objectContaining({groupId:GROUP_1,normalizedLicensePlate:"12ABC3",active:true,reason:"Testreden"})],skipDuplicates:true});
+    expect(prismaMock.plateGroupMember.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.plateGroupMember.deleteMany).not.toHaveBeenCalled();
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith({data:expect.objectContaining({action:"PLATE_ADDED_TO_GROUP",metadata:{groupId:GROUP_1}})});
+  });
+  it("maakt geen dubbele koppeling of auditregel bij herhaald toevoegen", async () => {
+    prismaMock.plateGroupMember.createMany.mockResolvedValue({count:0});app=buildServer();
+    expect((await app.inject({method:"PUT",url:`/plates/12ABC3/groups/${GROUP_1}`,payload:{reason:"Testreden"}})).statusCode).toBe(204);
+    expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+  });
+  it("verwijdert uitsluitend de gekozen koppeling, ook de laatste", async () => {
+    app=buildServer();expect((await app.inject({method:"DELETE",url:`/plates/12ABC3/groups/${GROUP_1}`})).statusCode).toBe(204);
+    expect(prismaMock.plateGroupMember.deleteMany).toHaveBeenCalledWith({where:{normalizedLicensePlate:"12ABC3",groupId:GROUP_1}});
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith({data:expect.objectContaining({action:"PLATE_REMOVED_FROM_GROUP"})});
+  });
+  it("vereist een reden bij een hitgroep", async () => {
+    app=buildServer();const response=await app.inject({method:"PUT",url:`/plates/12ABC3/groups/${GROUP_1}`,payload:{}});
+    expect(response.statusCode).toBe(400);expect(response.json().error).toBe("REASON_REQUIRED");expect(prismaMock.plateGroupMember.createMany).not.toHaveBeenCalled();
+  });
+  it("weigert een inactieve of ontbrekende groep", async () => {
+    prismaMock.plateGroup.findUnique.mockResolvedValue({...group(),active:false});app=buildServer();
+    expect((await app.inject({method:"PUT",url:`/plates/12ABC3/groups/${GROUP_1}`,payload:{reason:"test"}})).statusCode).toBe(400);
+    expect(prismaMock.plateGroupMember.createMany).not.toHaveBeenCalled();
+  });
+  it.each(["PUT","DELETE"] as const)("weigert Viewer %s", async method => {
+    authState.permissions=[PERMISSIONS.PASSAGES_VIEW];app=buildServer();
+    expect((await app.inject({method,url:`/plates/12ABC3/groups/${GROUP_1}`,payload:method==="PUT"?{reason:"test"}:undefined})).statusCode).toBe(403);
+    expect(prismaMock.plateGroupMember.createMany).not.toHaveBeenCalled();expect(prismaMock.plateGroupMember.deleteMany).not.toHaveBeenCalled();
+  });
+  it("toont bestaande koppelingen en vraagt uitsluitend actieve beschikbare groepen op", async () => {
+    app=buildServer();const response=await app.inject({url:"/plates/12ABC3/groups"});
+    expect(response.statusCode).toBe(200);expect(response.json().memberships[0]).toMatchObject({group:{id:GROUP_1},active:true});
+    expect(prismaMock.plateGroup.findMany).toHaveBeenCalledWith(expect.objectContaining({where:{active:true}}));
+  });
 });

@@ -22,6 +22,10 @@ export class PassageService {
 
   async store(event: NormalizedAnprEvent, policy: PassagePolicy = {}): Promise<PassageResult> {
     const receivedAt = new Date(event.receivedAt?.getTime() ?? Date.now());
+    // ITSAPI already validates and resolves camera event time to an absolute instant.
+    // Keep the existing CGI receipt-time policy and all historical timestamps intact.
+    const usesEventTime = event.rawMetadata?.provider === "DAHUA_ITSAPI";
+    const timestamp = usesEventTime ? event.occurredAt : receivedAt;
     const sourceEventId = event.sourceEventId ?? `fallback:${createHash("sha256").update(JSON.stringify([
       event.cameraId, event.normalizedPlate, event.occurredAt.toISOString(), event.lane ?? null
     ])).digest("hex")}`;
@@ -62,7 +66,7 @@ export class PassageService {
         directionSource: event.sourceDirection ? "CAMERA_EVENT_MAPPED" : event.direction && event.direction !== "UNKNOWN" ? "NORMALIZED_EVENT" : "UNKNOWN",
         cameraReportedAt: event.occurredAt.toISOString(),
         cameraTimeSource: event.rawMetadata?.timeSource ?? "CAMERA_EVENT",
-        timeSource: "SERVER_RECEIPT", receivedAt: receivedAt.toISOString()
+        timeSource: usesEventTime ? event.rawMetadata?.timeSource ?? "CAMERA_EVENT" : "SERVER_RECEIPT", receivedAt: receivedAt.toISOString()
       };
       if(event.rawMetadata?.vehicleTypeStatus && event.rawMetadata.vehicleTypeStatus!=="MAPPED") this.options.logger.warn(JSON.stringify({cameraId:camera.id,processingResult:"VEHICLE_TYPE_NOT_MAPPED",reason:event.rawMetadata.vehicleTypeStatus}));
       const result = await this.options.prisma.$transaction(async (tx): Promise<PassageResult> => {
@@ -87,7 +91,7 @@ export class PassageService {
           return { status: "duplicate" };
         }
         const created = await tx.passage.create({ data: {
-          cameraId: camera.id, timezone, timestamp: receivedAt, location: event.location ?? camera.location, direction,
+          cameraId: camera.id, timezone, timestamp, location: event.location ?? camera.location, direction,
           originalLicensePlate: event.originalPlate, normalizedLicensePlate: event.normalizedPlate,
           displayLicensePlate: displayLicensePlate(event.originalPlate), plateConfidence: event.confidence,
           plateCountry: event.plateCountry, vehicleType: event.vehicleType ?? "UNKNOWN",
@@ -108,7 +112,7 @@ export class PassageService {
         await tx.attentionAnalysisJob.create({data:{passageId:created.id}});
         await detectAndCreateHit(tx, {
           passageId: created.id, cameraId: camera.id, normalizedLicensePlate: event.normalizedPlate,
-          location: event.location ?? camera.location, timestamp: receivedAt, direction, source: event.source,
+          location: event.location ?? camera.location, timestamp, direction, source: event.source,
           vehicleImageObjectId: overviewObjectId, plateImageObjectId: plateObjectId
         });
         await tx.camera.update({ where: { id: camera.id }, data: {
