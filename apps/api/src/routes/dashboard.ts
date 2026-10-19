@@ -10,7 +10,9 @@ import { hitGroupSelect, publicHit } from "../lib/public-hit.js";
 export async function loadDashboard(db: PrismaClient = prisma, now = new Date()) {
   const day = applicationDay(now);
   const timestamp = { gte: day.start, lt: day.end };
-  const passageWhere = { timestamp, status: "ACTIVE" as const };
+  // Counter and list share the platform day and receipt-time cutoff. Old camera-clock
+  // timestamps in the future must not displace newly received passages.
+  const passageWhere = { timestamp: { ...timestamp, lte: now }, status: "ACTIVE" as const };
   // Same Hit source, day and database snapshot for the tile and list. No re-matching current rules.
   const hitWhere = { timestamp };
   const [cameraTotal, cameraOnline, passagesToday, hitsToday, watchedPlates, recentPassages, recentHits, cameraProblems, demoPassagesToday, demoHitsToday] = await db.$transaction(async tx => Promise.all([
@@ -19,7 +21,7 @@ export async function loadDashboard(db: PrismaClient = prisma, now = new Date())
     tx.passage.count({ where: passageWhere }),
     tx.hit.count({ where: hitWhere }),
     tx.plateGroupMember.findMany({ where: { active: true, group: { active: true, hitEnabled: true } }, distinct: ["normalizedLicensePlate"], select: { normalizedLicensePlate: true } }),
-    tx.passage.findMany({ where: { status: "ACTIVE" }, take: 8, orderBy: [{ timestamp: "desc" }, { id: "desc" }], include: { camera: { select: { name: true, historicalName: true, vpnLocation: { select: { timezone: true } } } } } }),
+    tx.passage.findMany({ where: passageWhere, take: 8, orderBy: [{ timestamp: "desc" }, { id: "desc" }], include: { camera: { select: { name: true, historicalName: true, vpnLocation: { select: { timezone: true } } } } } }),
     tx.hit.findMany({ where: hitWhere, take: 5, orderBy: [{ timestamp: "desc" }, { id: "desc" }], include: {
       camera: { select: { name: true, historicalName: true, vpnLocation: { select: { timezone: true } } } }, group: { select: hitGroupSelect },
       groups: { include: { group: { select: hitGroupSelect } }, orderBy: { group: { name: "asc" } } },

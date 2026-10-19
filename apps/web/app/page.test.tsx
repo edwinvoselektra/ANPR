@@ -17,6 +17,20 @@ describe("dashboard polling en historische hitcontext",()=>{
   expect(screen.getByText("Hits vandaag").parentElement?.textContent).toBe("Hits vandaag1");expect(screen.getByText("Passages vandaag").parentElement?.textContent).toBe("Passages vandaag1");
   expect(mock).toHaveBeenLastCalledWith("/dashboard",{cache:"no-store"});view.unmount();await act(async()=>{await vi.advanceTimersByTimeAsync(3000)});expect(mock).toHaveBeenCalledTimes(2);
  });
+ it("neemt de nieuwe passage en teller samen over bij de volgende netwerkverversing",async()=>{
+  vi.useFakeTimers();
+  const older={id:"old",displayLicensePlate:"OUD12",timestamp:"2026-07-14T05:30:00Z",timeZone:"Europe/Amsterdam",camera:{name:"Testcamera"},source:"DAHUA_CAMERA"};
+  const newer={...older,id:"new",displayLicensePlate:"NIEUW12",timestamp:"2026-07-14T05:31:00Z"};
+  mock.mockResolvedValueOnce({...base,counters:{...base.counters,passagesToday:1},recentPassages:[older]})
+   .mockResolvedValueOnce({...base,counters:{...base.counters,passagesToday:2},recentPassages:[newer,older]});
+  render(<Dashboard/>);await act(async()=>{});
+  expect(screen.getByText("Passages vandaag").parentElement?.textContent).toBe("Passages vandaag1");
+  await act(async()=>{await vi.advanceTimersByTimeAsync(3000)});
+  const links=screen.getAllByRole("link").filter(link=>link.getAttribute("href")?.startsWith("/passages/"));
+  expect(links.map(link=>link.textContent)).toEqual(["NIEUW12","OUD12"]);
+  expect(screen.getByText("Passages vandaag").parentElement?.textContent).toBe("Passages vandaag2");
+  expect(mock).toHaveBeenCalledTimes(2);expect(mock).toHaveBeenLastCalledWith("/dashboard",{cache:"no-store"});
+ });
  it("behoudt het laatste overzicht wanneer verversen mislukt",async()=>{
   vi.useFakeTimers();mock.mockResolvedValueOnce(base).mockRejectedValueOnce(new Error("Tijdelijk offline"));render(<Dashboard/>);await act(async()=>{});await act(async()=>{await vi.advanceTimersByTimeAsync(3000)});expect(screen.getByText("Hits vandaag")).toBeTruthy();expect(screen.getByRole("status").textContent).toContain("Tijdelijk offline");
  });
