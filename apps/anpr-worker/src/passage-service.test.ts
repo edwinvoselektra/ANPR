@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PassageService } from "./passage-service.js";
-import { calculatePassageExpiry } from "@anpr/shared";
+import { calculatePassageExpiry, formatLocalDate } from "@anpr/shared";
 import type { NormalizedAnprEvent } from "./types.js";
 
 const prisma:any={passage:{findFirst:vi.fn(),create:vi.fn(),update:vi.fn()},camera:{findFirst:vi.fn(),update:vi.fn(),updateMany:vi.fn()},plateGroupMember:{findMany:vi.fn()},hit:{create:vi.fn()},attentionAnalysisJob:{create:vi.fn()},$transaction:vi.fn()};
@@ -63,11 +63,15 @@ describe("server receipt time",()=>{
   it("orders three cameras by receipt despite different camera clocks",async()=>{
     const service=new PassageService({prisma,storage,dedupeWindowMs:3000,logger});
     const clocks=["2099-01-01T00:00:00Z","2000-01-01T00:00:00Z","2026-10-16T20:00:00Z"];
+    const zones=["Europe/Amsterdam","America/New_York","Asia/Tokyo"];
     for(let i=0;i<clocks.length;i++) {
       const cameraId=`camera-${i}`;
-      prisma.camera.findFirst.mockResolvedValue({id:cameraId,location:"Test"});
-      await service.store({...event,cameraId,occurredAt:new Date(clocks[i]!),receivedAt:new Date(`2026-10-16T08:00:0${i}Z`)});
+      prisma.camera.findFirst.mockResolvedValue({id:cameraId,location:"Test",vpnLocation:{timezone:zones[i]}});
+      await service.store({...event,rawMetadata:{provider:"DAHUA_ITSAPI",timeSource:"AccurateTime"},cameraId,occurredAt:new Date(clocks[i]!),receivedAt:new Date(`2026-10-16T08:00:0${i}Z`)});
     }
     expect(prisma.passage.create.mock.calls.map(([args]: [{data:{timestamp:Date}}])=>args.data.timestamp.toISOString())).toEqual(["2026-10-16T08:00:00.000Z","2026-10-16T08:00:01.000Z","2026-10-16T08:00:02.000Z"]);
+    const saved: Array<{timestamp:Date;timezone:string}> = prisma.passage.create.mock.calls.map(([args]: [{data:{timestamp:Date;timezone:string}}])=>args.data);
+    expect(saved.map(item=>item.timezone)).toEqual(zones);
+    expect(saved.map(item=>formatLocalDate(item.timestamp,item.timezone))).toEqual(["16-10-2026 10:00:00","16-10-2026 04:00:01","16-10-2026 17:00:02"]);
   });
 });

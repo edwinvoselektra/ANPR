@@ -19,7 +19,7 @@ TollgateInfo: één object onder `Picture`, geen batch of multipart.
 | `Plate.PlateNumber` | Verplicht kenteken; origineel, genormaliseerd en weergavewaarde in passage |
 | `Plate.IsExist` | Indien false: geen passage; 422 |
 | `SnapInfo.DeviceID` | Verplicht; exact vergelijken met registratie |
-| `SnapInfo.AccurateTime`, anders `SnapTime` | Geldige eventtijd voor passage, hit, groepsgeldigheid en eventidentiteit; milliseconden behouden. Bij ongeldige AccurateTime wordt geldige SnapTime geprobeerd |
+| `SnapInfo.AccurateTime`, anders `SnapTime` | Cameratijd uitsluitend voor diagnose en eventidentiteit; milliseconden behouden. Bij ongeldige AccurateTime wordt geldige SnapTime geprobeerd. Hoofdregistratie gebruikt serverontvangsttijd |
 | `Plate.Channel` | Onderdeel van eventidentiteit; standaard 0 |
 | `Plate.Confidence` | Optioneel geheel getal 0–255, opgeslagen als waarde / 255 |
 | `Vehicle.VehicleType` | Bekende teksttypen naar platformenum; anders UNKNOWN |
@@ -34,11 +34,13 @@ TollgateInfo: één object onder `Picture`, geen batch of multipart.
 
 Niet herkende richtingswaarden, waaronder `Obverse` en `Reverse`, worden als `rawDirection` bewaard en geven richting UNKNOWN. Hun relatie tot de opgestelde camera is nog niet vastgesteld; er wordt geen rijrichting verzonnen. Ook de confidence-schaal 0–255 moet bij de fysieke camera worden bevestigd. Ontbrekende of onbruikbare optionele voertuigmetadata blokkeert geen passage.
 
-Nieuwe **ITSAPI**-passages gebruiken de geldige `SnapInfo.AccurateTime`, anders geldige `SnapInfo.SnapTime`, als `Passage.timestamp`. Dit sluit aan op de bestaande Picture-profieladapter en de [door de auteur gepubliceerde ITC413-implementatie](https://gist.github.com/paindefender/cf74164ade12f8a2954f271f3d5972e7), die `AccurateTime` als detectietijd uitleest. Een geschoonde nieuwe payload van de productiecamera is hier niet beschikbaar; er wordt geen aanvullende firmwarebetekenis geclaimd.
+Nieuwe echte camerapassages (ITSAPI en CGI) gebruiken **serverontvangsttijd** als `Passage.timestamp`. De ITSAPI-receiver legt `receivedAt` één keer vast aan het begin van het HTTP-verzoek, vóór authenticatie en body-/beeldverwerking. CGI legt ontvangst vast bij de eventmetadata. De gedeelde PassageService gebruikt deze UTC-instant voor passage, hit, groepsgeldigheid, bewaartermijn, opslagpad en camerastatus. Zonder aangeleverd ontvangsttijdstip geldt de servertijd bij ingang van de service. Er is geen cameraklok-override of automatische keuze voor een vermeend gesynchroniseerde camera.
 
-Tijden met offset of Z zijn absolute tijdstippen. Zoneloze kloktijden worden in de IANA-zone van de cameralocatie geïnterpreteerd, met `PLATFORM_TIMEZONE` en uiteindelijk `Europe/Amsterdam` als terugval. Alleen de presentatie converteert de opgeslagen UTC-tijd weer naar die zone. Ontbrekende, ongeldige, dubbelzinnige of niet-bestaande lokale tijden worden geweigerd wanneer beide tijdvelden onbruikbaar zijn. Historische passages en eventkeys van eerder geldig verwerkte events blijven intact; retries vullen hoogstens ontbrekende beelden aan.
+`rawEventMetadata.timeSource` is `SERVER_RECEIPT`; `receivedAt` bevat de primaire UTC-tijd. De bestaande parser leest geldige `SnapInfo.AccurateTime`, anders `SnapTime`, nog steeds voor diagnose (`cameraReportedAt`, `cameraTimeSource`) en stabiele eventidentiteit. Cameraklokafwijkingen veranderen de registratietijd niet. Een retry behoudt de oorspronkelijk opgeslagen tijd en vult hoogstens ontbrekende beelden aan. Als beide camera-tijdvelden onbruikbaar zijn, blijft de bestaande profielvalidatie weigeren: deze wijziging past de eventidentiteit en protocolacceptatie niet aan.
 
-`rawEventMetadata.timeSource` en `cameraTimeSource` noemen het gekozen veld, `cameraReportedAt` bevat het absolute camera-eventtijdstip. `receivedAt` blijft de ontvangst vóór authenticatie. Passage, hit en groepsgeldigheid gebruiken dezelfde eventtijd. Bewaartermijn, afbeeldingspad en verbindingsstatus blijven gebaseerd op ontvangsttijd; een vertraagde upload verliest daardoor niet onbedoeld direct zijn bewaartermijn. CGI houdt de bestaande ontvangsttijdpolicy. Geen migratie of historische reparatie. Zie [lokaal testplan en wijzigingsrapport](passage-time-groups.md).
+De IANA-zone wordt bewaard als `Passage.timezone`: cameralocatie → `PLATFORM_TIMEZONE` → `Europe/Amsterdam`. Ontvangsttijd wordt voor opslag **niet** verschoven naar een lokale kloktijd. API-responses blijven UTC-ISO met Z en leveren `timeZone`; alleen de formatter past deze zone toe voor de weergave. Luxon/IANA verwerkt zomer- en wintertijd. Twee camera’s kunnen dezelfde UTC-ontvangsttijd bewaren en toch ieder hun eigen lokale tijd tonen. Voor lokaal zoeken worden grenzen vanuit de camera-/platformzone naar UTC vertaald.
+
+Bestaande passages en UTC-timestamps blijven ongewijzigd. Geen migration, reset of productie-deploy. Bij een vertraagde upload is de registratietijd het ontvangsttijdstip, niet het fysieke detectiemoment; de serverklok moet correct gesynchroniseerd zijn. Zie [rapport en lokaal testplan](passage-time-groups.md).
 
 ## Responses en authenticatie
 

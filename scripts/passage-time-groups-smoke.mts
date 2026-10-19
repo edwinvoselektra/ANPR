@@ -30,9 +30,10 @@ try {
   for (const id of groupIds) await db.plateGroup.create({ data: { id, name: `${marker}-${id}`, color: "#123456", active: true, hitEnabled: true } });
   const service = new PassageService({ prisma: db, storage: { storePassageImage: async () => { throw new Error("No fixture images"); }, delete: async () => {} }, dedupeWindowMs: 3000, logger: { info: () => {}, warn: () => {}, error: () => {} } });
   const store = async (local: string, expectedUtc: string) => {
-    const { event } = parseItsapiTollgate({ Picture: { Plate: { PlateNumber: plate }, SnapInfo: { DeviceID: marker, AccurateTime: local } } }, { id: cameraId, timezone: "Europe/Amsterdam", directionMapping: "TOWARD_CAMERA_IS_INCOMING" });
-    assert.equal(event.occurredAt.toISOString(), expectedUtc);
-    await service.store(event);
+    const { event } = parseItsapiTollgate({ Picture: { Plate: { PlateNumber: plate }, SnapInfo: { DeviceID: marker, AccurateTime: local.replace("2026", "2000") } } }, { id: cameraId, timezone: "Europe/Amsterdam", directionMapping: "TOWARD_CAMERA_IS_INCOMING" });
+    assert.notEqual(event.occurredAt.toISOString(), expectedUtc);
+    // Explicit synthetic server ingress, independently of an incorrect camera clock.
+    await service.store({...event, receivedAt:new Date(expectedUtc)});
     const passage = await db.passage.findFirstOrThrow({ where: { cameraId, sourceEventId: event.sourceEventId } });
     assert.equal(passage.timestamp.toISOString(), expectedUtc);
     assert.equal(formatLocalDate(passage.timestamp, passage.timezone), `${local.slice(8, 10)}-${local.slice(5, 7)}-${local.slice(0, 4)} 07:30:00`);
@@ -69,7 +70,7 @@ try {
   assert.equal(await db.hit.count({ where: { cameraId } }), 1);
   assert.deepEqual(await db.passage.findUniqueOrThrow({ where: { id: original.id } }), original);
   assert.equal(await db.auditLog.count({ where: { actorId: userId, action: "PLATE_REMOVED_FROM_GROUP" } }), 2);
-  console.log("PASS: Amsterdam winter/summer event times, UTC persistence, API views/search, concurrent group additions, two groups → one new hit, removal including last group, audit and original passage preservation. Synthetic fixtures only; no hardware claim.");
+  console.log("PASS: Amsterdam winter/summer server receipt times, UTC persistence, API views/search, concurrent group additions, two groups → one new hit, removal including last group, audit and original passage preservation. Synthetic fixtures only; no hardware claim.");
 } finally {
   await app.close();
   await db.passage.deleteMany({ where: { cameraId } });

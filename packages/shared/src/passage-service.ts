@@ -22,10 +22,9 @@ export class PassageService {
 
   async store(event: NormalizedAnprEvent, policy: PassagePolicy = {}): Promise<PassageResult> {
     const receivedAt = new Date(event.receivedAt?.getTime() ?? Date.now());
-    // ITSAPI already validates and resolves camera event time to an absolute instant.
-    // Keep the existing CGI receipt-time policy and all historical timestamps intact.
-    const usesEventTime = event.rawMetadata?.provider === "DAHUA_ITSAPI";
-    const timestamp = usesEventTime ? event.occurredAt : receivedAt;
+    // The provider captures server receipt before auth/image processing. Camera time
+    // remains diagnostic/event identity only; never shift receipt into a local zone.
+    const timestamp = receivedAt;
     const sourceEventId = event.sourceEventId ?? `fallback:${createHash("sha256").update(JSON.stringify([
       event.cameraId, event.normalizedPlate, event.occurredAt.toISOString(), event.lane ?? null
     ])).digest("hex")}`;
@@ -66,7 +65,7 @@ export class PassageService {
         directionSource: event.sourceDirection ? "CAMERA_EVENT_MAPPED" : event.direction && event.direction !== "UNKNOWN" ? "NORMALIZED_EVENT" : "UNKNOWN",
         cameraReportedAt: event.occurredAt.toISOString(),
         cameraTimeSource: event.rawMetadata?.timeSource ?? "CAMERA_EVENT",
-        timeSource: usesEventTime ? event.rawMetadata?.timeSource ?? "CAMERA_EVENT" : "SERVER_RECEIPT", receivedAt: receivedAt.toISOString()
+        timeSource: "SERVER_RECEIPT", receivedAt: receivedAt.toISOString()
       };
       if(event.rawMetadata?.vehicleTypeStatus && event.rawMetadata.vehicleTypeStatus!=="MAPPED") this.options.logger.warn(JSON.stringify({cameraId:camera.id,processingResult:"VEHICLE_TYPE_NOT_MAPPED",reason:event.rawMetadata.vehicleTypeStatus}));
       const result = await this.options.prisma.$transaction(async (tx): Promise<PassageResult> => {

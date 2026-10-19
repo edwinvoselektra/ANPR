@@ -1,14 +1,16 @@
-# Passage-eventtijd en groepen — 19 oktober 2026
+# Passage-ontvangsttijd en groepen — 19 oktober 2026
 
 ## Tijd: oorzaak en keuze
 
-De gedeelde PassageService overschreef de reeds geparste Dahua-eventtijd met serverontvangsttijd. Dit was een expliciete eerdere policy, geen ontbrekende vaste uurcorrectie. Nieuwe ITSAPI-passages gebruiken nu de geldige `Picture.SnapInfo.AccurateTime`, anders geldige `SnapTime`. `AccurateTime` behoudt milliseconden en blijft de voorkeursbron uit het bestaande Picture-profiel. De [oorspronkelijke ITC413-implementatie](https://gist.github.com/paindefender/cf74164ade12f8a2954f271f3d5972e7) leest hetzelfde veld als gebeurtenistijd. De gebruiker bevestigt echte ITSAPI-inname; deze wijziging heeft geen nieuwe ruwe productiepayload of hardwaremeting gecontroleerd. Controleer lokaal de cameraklok aan de hand van een nieuwe fysieke passage.
+De nieuwste opdracht vervangt de eerder gekozen ITSAPI-eventtijd door **serverontvangsttijd** voor alle nieuwe echte camerapassages. De gedeelde PassageService gebruikt `event.receivedAt`, anders `Date.now()` bij service-ingang. ITSAPI legt ontvangst vast vóór authenticatie en body-/beeldverwerking; CGI bij binnenkomst van eventmetadata. Een fout ingestelde cameraklok kan daardoor passage, hit of groepsgeldigheid niet verschuiven.
 
-De bestaande IANA-/Luxon-verwerking blijft leidend: cameralocatie → PLATFORM_TIMEZONE → Europe/Amsterdam. De locatie is bewerkbaar onder Locaties. Offsetloze eventtijden worden één keer vanuit die zone naar UTC vertaald; Z en expliciete offsets blijven absolute tijdstippen. Geen handmatige zomer-/wintertijdcorrecties. Tijdzonesnapshot op Passage en API-veld `timeZone` blijven behouden. Amsterdam 07:30 is 06:30Z in januari en 05:30Z in juli. Als beide tijdvelden ongeldig zijn (ook ambigue herfsttijd of overgeslagen lentetijd zonder offset), blijft de receiver weigeren in plaats van een tijdstip te verzinnen.
+`Passage.timestamp` en `Hit.timestamp` bewaren dezelfde UTC-instant via Prisma/PostgreSQL. `rawEventMetadata.receivedAt` bevat deze tijd als ISO met Z, `timeSource` is `SERVER_RECEIPT`. De Dahua-tijd blijft uitsluitend diagnostiek (`cameraReportedAt`, `cameraTimeSource`) en onderdeel van de bestaande eventidentiteit. Geldige AccurateTime, anders SnapTime, blijft daarvoor geparst worden. Retries behouden hun oorspronkelijke registratietijd. Onbruikbare camera-tijdvelden vallen nog steeds onder de bestaande protocolvalidatie; eventkeys worden niet gewijzigd.
 
-Dezelfde eventtijd gaat naar passage, hit en de geldigheidscontrole van groepslidmaatschappen. `receivedAt` blijft apart in metadata; opslagpad, bewaartermijn en cameraverbindingsstatus blijven ontvangsttijd gebruiken. CGI-verwerking is ongemoeid gelaten. Er is geen historische correctie: bestaande UTC-timestamps en eerder opgeslagen retries veranderen niet.
+De IANA-zone volgt cameralocatie → PLATFORM_TIMEZONE → Europe/Amsterdam en wordt als zonesnapshot bewaard in `Passage.timezone`. De API levert UTC-timestamps plus `timeZone`. `formatLocalDate` in `packages/shared/src/presentation.ts`, via `apps/web/lib/api.ts` beschikbaar als `formatDate`, converteert uitsluitend voor presentatie. Luxon/IANA verzorgt zomer-/wintertijd. Amsterdam 07:30 correspondeert met ontvangst 06:30Z in januari en 05:30Z in juli. Geen lokale uurcorrectie bij opslag, geen dubbele conversie. Meerdere camera’s bewaren onafhankelijke zonesnapshots en tonen hun UTC-ontvangsttijd in hun eigen regio.
 
-Dashboard/Recente passages, Live passages, Hits, Zoeken en passage-detail gebruiken al de centrale formatter met de door de API geleverde passagezone. Het kentekendossier miste voor eerste/laatste waarneming de bijbehorende camera-/zonesnapshot; deze twee API-velden en de weergave zijn aangevuld. Het hitdetail toont eventtijd en ontvangst/opslag in de passagezone. De huidige auditinterface toont mutatietijd, geen afzonderlijke passagetimestamp; die auditregistraties zijn niet herschreven.
+Dashboard/Recente passages, Live passages (ObservationCollection), Hits, Zoeken en passage-detail geven de passagezone al door aan deze formatter. API-presentatie loopt via `historicalCamera`/`publicHit`; zoekgrenzen worden in `routes/search.ts` vanuit de geselecteerde camera-/platformzone naar UTC omgezet. Het kentekendossier gebruikt ook de zone van de eerste/laatste waarneming. Deze routes en weergaven zijn gecontroleerd; er zijn geen aanvullende UI-wijzigingen nodig.
+
+Geen historische correctie: bestaande timestamps blijven intact. De groepsfunctionaliteit uit de eerdere opdracht blijft behouden. De serverklok moet via normale tijdsynchronisatie correct lopen. Bij vertraagde uploads toont de hoofdregistratie het ontvangsttijdstip.
 
 ## Groepskoppeling
 
@@ -20,9 +22,9 @@ Nieuwe routes: GET `/plates/:normalized/groups`, PUT en DELETE `/plates/:normali
 
 Geen schemawijziging of migration nodig. Geen database-reset, historische gegevenswijziging of productie-deploy uitgevoerd.
 
-Regressies dekken winter/zomer 07:30, offsets/Z en milliseconden zonder dubbele conversie, SnapTime-terugval, hit/eventtijd en groepsgeldigheid, retries, normalisatie, meerdere koppelingen, dubbele aanvragen, redenplicht, inactieve groepen, rechten, audit en UI toevoegen/verwijderen/fouten. `scripts/passage-time-groups-smoke.mts` voegt een geïsoleerde PostgreSQL-ketentest toe; die weigert iedere database behalve `anpr_native_test` en ruimt uitsluitend eigen fixtures op. `scripts/itsapi-processing-smoke.mts` controleert nu eventtijd én afzonderlijke ontvangsttijd.
+Regressies dekken winter/zomer 07:30 op serverontvangsttijd, foutieve cameraklok, verschillende camera’s met eigen tijdzones, dezelfde tijd voor passage/hit/groepsgeldigheid en behoud bij retries. De eerdere groepsregressies blijven behouden. `scripts/passage-time-groups-smoke.mts` voegt een geïsoleerde PostgreSQL-ketentest toe; die weigert iedere database behalve `anpr_native_test` en ruimt uitsluitend eigen fixtures op. `scripts/itsapi-processing-smoke.mts` controleert nu primaire ontvangsttijd én afzonderlijke diagnostische cameratijd.
 
-Uitgevoerd: workspace-typecheck en lint geslaagd; alle afzonderlijke testsuites geslaagd (411 tests totaal: API 216, web 63, ANPR-worker 46, video-worker 9, database 31, shared 46). De API-suite is met `npm run test -w @anpr/api -- --configLoader runner` uitgevoerd: de standaard Vite-cachemap was niet beschrijfbaar; vier bestaande lokale HTTP-tests vereisten uitvoering buiten de sandbox. Alle vier slagen daar eveneens. Prisma-schema geldig en beide integratiescripts afzonderlijk getypecheckt.
+Validatie van de voorgaande fase (vóór de terugkeer naar ontvangsttijd): workspace-typecheck en lint geslaagd; alle afzonderlijke testsuites geslaagd (411 tests totaal: API 216, web 63, ANPR-worker 46, video-worker 9, database 31, shared 46). De API-suite is met `npm run test -w @anpr/api -- --configLoader runner` uitgevoerd: de standaard Vite-cachemap was niet beschrijfbaar; vier bestaande lokale HTTP-tests vereisten uitvoering buiten de sandbox. Alle vier slagen daar eveneens. Prisma-schema geldig en beide integratiescripts afzonderlijk getypecheckt.
 
 Shared-, API- en Next.js-productiebuild geslaagd. De standaard root-build strandt op bestaande niet-beschrijfbare worker-`dist`-bestanden van een andere eigenaar. Beide workers compileren succesvol met hun normale build-tsconfig en een alternatieve outputmap:
 
@@ -33,9 +35,23 @@ npx tsc -p apps/anpr-worker/tsconfig.build.json --outDir data/build-check/anpr-w
 
 De oude niet-beschrijfbare Next.js-cache is bewaard onder het genegeerde `data/time-groups-build-backup/web-next`; daarna slaagt de reguliere webbuild. Docker is in deze WSL-omgeving niet beschikbaar. De geconfigureerde PostgreSQL-server is niet bereikbaar. Dockerbuilds, Compose-validatie en de echte PostgreSQL-ketentests zijn daarom niet uitgevoerd; deze zijn nog geen geslaagde acceptatiechecks.
 
+## Aanvullende wijziging: serverontvangst als primaire tijd
+
+Aangepast in deze vervolgstap:
+
+- `packages/shared/src/passage-service.ts`.
+- `apps/api/src/itsapi-processing.test.ts`.
+- `apps/anpr-worker/src/passage-service.test.ts`.
+- `scripts/itsapi-processing-smoke.mts` en `scripts/passage-time-groups-smoke.mts`.
+- `README.md`, `docs/itsapi-receiver.md` en dit rapport.
+
+De parser, receiver, groepsroutes en frontend zijn in deze vervolgstap niet gewijzigd. De tests controleren Amsterdam zomer/winter, fout ingestelde klok, ontvangst vóór authenticatie, verschillende locatiezones, passage/hit/geldigheidscontrole en retrybehoud. De databaseketentest gebruikt expliciet synthetische serverontvangsttijden en is uitsluitend bedoeld voor `anpr_native_test`.
+
+Validatie van deze vervolgstap: typecheck en lint van alle workspaces geslaagd. De relevante API-tests zijn geslaagd (ITSAPI-verwerking, passages, dashboard, zoeken/hits, pushpresentatie en ITSAPI-protocol), evenals de 12 passage-service-tests en alle 63 webtests. Shared-, API- en webproductiebuild slagen. De standaard root-build raakt opnieuw de bestaande EACCES op worker-dist; beide workers compileren succesvol met hun build-tsconfig naar `data/receipt-time-build`. Beide integratiescripts zijn afzonderlijk getypecheckt, maar niet tegen PostgreSQL uitgevoerd. Geen live browser-/cameraketentest of productie-uitrol uitgevoerd.
+
 ## Gewijzigde bestanden
 
-- `packages/shared/src/passage-service.ts`: ITSAPI-eventtijd voor passage/hit/geldigheid.
+- `packages/shared/src/passage-service.ts`: serverontvangsttijd voor passage/hit/geldigheid.
 - `apps/api/src/lib/itsapi-parser.ts`: geldige AccurateTime/SnapTime-selectie, milliseconden en ISO-varianten.
 - `apps/api/src/routes/plates.ts`: afzonderlijke groepsroutes met transactionele audit; tijdzones eerste/laatste waarneming.
 - `apps/web/components/PlateGroups.tsx`: gedeelde groepssectie en acties.
@@ -56,7 +72,7 @@ docker compose up -d --build
 Dit bouwt en start uitsluitend de lokale Compose-omgeving. Gebruik je bestaande lokale `.env`; wijs deze niet naar productie. Er is geen nieuwe migratie nodig; de bestaande migratieservice blijft zoals hij was.
 
 1. Open `http://localhost:3000`, log in als ADMIN of OPERATOR met kentekenbeheerrechten. Controleer bij Locaties dat de camera van Vos Elektra aan de locatie met `Europe/Amsterdam` gekoppeld is. Een camera zonder locatie valt op de platformzone terug.
-2. Laat een nieuwe echte passage binnenkomen via de lokaal ingestelde ITSAPI-ontvanger. Vergelijk het fysieke moment en de beeldtijd met Dashboard, Live passages en passage-detail. De API levert UTC met Z en `timeZone: Europe/Amsterdam`. Oude foutieve tijden worden niet achteraf gerepareerd. Verander hiervoor geen productiecamera-instellingen.
+2. Laat een nieuwe echte passage binnenkomen via de lokaal ingestelde ITSAPI-ontvanger. Vergelijk de actuele lokale tijd bij serverontvangst met Dashboard, Live passages en passage-detail. Een foutieve tijd op het camerabeeld mag de registratie niet verschuiven. De API levert UTC met Z en `timeZone: Europe/Amsterdam`. Oude foutieve tijden worden niet achteraf gerepareerd. Verander hiervoor geen productiecamera-instellingen.
 3. Maak via Groepen een actieve signaleringsgroep met hitdetectie aan of kies een bestaande. Open de passage → Aan groep toevoegen → kies die groep → vul de reden in → Toevoegen. Voeg desgewenst een tweede groep toe. Controleer de sectie Groepen en het kentekendossier.
 4. Laat hetzelfde kenteken opnieuw passeren met een nieuw eventtijdstip. Verwacht één nieuwe passage en één hit met alle toepasselijke actieve hitgroepen. Controleer de tijd ook onder Hits en zoek met camera + lokale datum/tijd. Een herupload van hetzelfde event is een retry en wordt terecht geen nieuwe passage/hit.
 5. Verwijder één koppeling. Een volgende passage mag alleen de resterende hitgroepen raken. Verwijder de laatste: een nieuwe passage levert geen groepshit op. De oorspronkelijke passages en hithistorie blijven bestaan. Een actieve groep zonder hitdetectie veroorzaakt geen hit.
