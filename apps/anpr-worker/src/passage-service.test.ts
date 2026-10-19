@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PassageService } from "./passage-service.js";
+import { calculatePassageExpiry } from "@anpr/shared";
 import type { NormalizedAnprEvent } from "./types.js";
 
 const prisma:any={passage:{findFirst:vi.fn(),create:vi.fn(),update:vi.fn()},camera:{findFirst:vi.fn(),update:vi.fn(),updateMany:vi.fn()},plateGroupMember:{findMany:vi.fn()},hit:{create:vi.fn()},attentionAnalysisJob:{create:vi.fn()},$transaction:vi.fn()};
@@ -35,4 +36,38 @@ it("does not store an event after camera archival wins the transaction lock", as
   prisma.camera.updateMany.mockResolvedValue({count:0});
   await expect(new PassageService({prisma,storage,dedupeWindowMs:3000,logger}).store(event)).rejects.toThrow("CAMERA_NOT_ACTIVE");
   expect(prisma.passage.create).not.toHaveBeenCalled();
+});
+
+afterEach(()=>vi.useRealTimers());
+
+describe("server receipt time",()=>{
+  it("uses service ingress time rather than a wrong camera clock when no ingress was supplied",async()=>{
+    const receipt=new Date("2026-10-16T08:00:00Z");
+    vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(receipt);
+    await new PassageService({prisma,storage,dedupeWindowMs:3000,logger}).store(event);
+    expect(prisma.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({timestamp:receipt,expiresAt:calculatePassageExpiry(receipt)})});
+  });
+  it("uses the same receipt time for images, retention, hits and camera status despite processing delay",async()=>{
+    const receipt=new Date("2026-10-16T08:00:00Z");
+    vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(new Date("2026-10-16T08:03:00Z"));
+    storage.storePassageImage.mockResolvedValue("passages/receipt.jpg");
+    prisma.plateGroupMember.findMany.mockResolvedValue([{groupId:"group",group:{id:"group",name:"Test"}}]);
+    prisma.hit.create.mockResolvedValue({id:"hit"});
+    await new PassageService({prisma,storage,dedupeWindowMs:3000,logger}).store({...event,receivedAt:receipt,overviewImage:{contentType:"image/jpeg",data:Buffer.from([255,216,255,217])}});
+    expect(prisma.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({timestamp:receipt,expiresAt:calculatePassageExpiry(receipt),rawEventMetadata:expect.objectContaining({receivedAt:receipt.toISOString(),cameraReportedAt:event.occurredAt.toISOString(),timeSource:"SERVER_RECEIPT"})})});
+    expect(storage.storePassageImage).toHaveBeenCalledWith(expect.anything(),receipt);
+    expect(prisma.hit.create).toHaveBeenCalledWith({data:expect.objectContaining({timestamp:receipt})});
+    expect(prisma.plateGroupMember.findMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({AND:[{OR:[{validFrom:null},{validFrom:{lte:receipt}}]},{OR:[{validUntil:null},{validUntil:{gte:receipt}}]}]})}));
+    expect(prisma.camera.update).toHaveBeenCalledWith({where:{id:event.cameraId},data:expect.objectContaining({lastVehicleRegistrationAt:receipt,lastAnprEventAt:receipt})});
+  });
+  it("orders three cameras by receipt despite different camera clocks",async()=>{
+    const service=new PassageService({prisma,storage,dedupeWindowMs:3000,logger});
+    const clocks=["2099-01-01T00:00:00Z","2000-01-01T00:00:00Z","2026-10-16T20:00:00Z"];
+    for(let i=0;i<clocks.length;i++) {
+      const cameraId=`camera-${i}`;
+      prisma.camera.findFirst.mockResolvedValue({id:cameraId,location:"Test"});
+      await service.store({...event,cameraId,occurredAt:new Date(clocks[i]!),receivedAt:new Date(`2026-10-16T08:00:0${i}Z`)});
+    }
+    expect(prisma.passage.create.mock.calls.map(([args]: [{data:{timestamp:Date}}])=>args.data.timestamp.toISOString())).toEqual(["2026-10-16T08:00:00.000Z","2026-10-16T08:00:01.000Z","2026-10-16T08:00:02.000Z"]);
+  });
 });

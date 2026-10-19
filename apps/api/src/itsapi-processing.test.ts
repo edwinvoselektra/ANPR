@@ -20,6 +20,8 @@ let app: ReturnType<typeof buildItsapiReceiver>;
 let db: any;
 let storage: {storePassageImage: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn>};
 beforeEach(()=>{
+  vi.useFakeTimers({toFake:["Date"]});
+  vi.setSystemTime(new Date("2026-10-16T08:00:00.000Z"));
   let passage: any = null;
   const camera={id:"fixture-camera",active:true,isDraft:false,archivedAt:null,configVersion:1,anprProvider:"DAHUA_ITSAPI",rtspHost:"192.168.178.248",location:"Configured location",directionMapping:"TOWARD_CAMERA_IS_INCOMING",vpnLocation:{timezone:"Europe/Amsterdam"}};
   const registration={cameraId:camera.id,camera,expectedDeviceId:device,protocolVersion:"V1.19",authenticationEnabled:true,username,passwordEncrypted:encryptSecret(password)};
@@ -36,7 +38,7 @@ beforeEach(()=>{
   storage={storePassageImage:vi.fn().mockImplementation(async()=>`passages/${randomUUID()}.jpg`),delete:vi.fn()};
   app=buildItsapiReceiver(db as PrismaClient,storage);
 });
-afterEach(async()=>{await app.close()});
+afterEach(async()=>{await app.close();vi.useRealTimers()});
 async function upload(path: string, payload: unknown, secret = password) {
   const challenge = await app.inject({method:"POST",url:path});
   const authorization = createDigestAuthorization({challenge:String(challenge.headers["www-authenticate"]),method:"POST",uri:path,username,password:secret});
@@ -89,18 +91,36 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
     const response=await upload(ITSAPI_ANPR_PATH,fixture());
     expect(response.statusCode).toBe(200);expect(response.json()).toEqual({Result:true,DeviceID:device});
     expect(response.headers["content-type"]).toBe("application/json; charset=utf-8");
-    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({normalizedLicensePlate:"TEST123",timestamp:new Date("2026-10-02T11:24:56.123Z"),vehicleType:"CAR",vehicleColor:"BLUE",direction:"INCOMING",location:"Testlocatie",plateConfidence:0.8,vehicleImage1ObjectId:expect.any(String),plateImageObjectId:expect.any(String),vehicleImage2ObjectId:expect.any(String)})});
+    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({normalizedLicensePlate:"TEST123",timestamp:new Date("2026-10-16T08:00:00.000Z"),vehicleType:"CAR",vehicleColor:"BLUE",direction:"INCOMING",location:"Testlocatie",plateConfidence:0.8,vehicleImage1ObjectId:expect.any(String),plateImageObjectId:expect.any(String),vehicleImage2ObjectId:expect.any(String)})});
     expect(db.attentionAnalysisJob.create).toHaveBeenCalledOnce();
     expect(storage.storePassageImage).toHaveBeenCalledOnce();
+  });
+  it("legt ontvangst vast vóór authenticatie en bewaart de fout ingestelde cameratijd apart",async()=>{
+    const lookup=db.itsapiRegistration.findUnique.getMockImplementation();
+    db.itsapiRegistration.findUnique.mockImplementation(async(...args: unknown[])=>{
+      vi.setSystemTime(new Date("2026-10-16T08:02:00.000Z"));
+      return lookup!(...args);
+    });
+    const response=await upload(ITSAPI_ANPR_PATH,fixture());
+    expect(response.statusCode).toBe(200);
+    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({
+      timestamp:new Date("2026-10-16T08:00:00.000Z"),
+      rawEventMetadata:expect.objectContaining({timeSource:"SERVER_RECEIPT",receivedAt:"2026-10-16T08:00:00.000Z",cameraReportedAt:"2026-10-02T11:24:56.123Z",cameraTimeSource:"AccurateTime"}),
+    })});
   });
   it("herkent retries ondanks gewijzigde uploadteller zonder dubbele passage/hit/pushjob",async()=>{
     db.plateGroupMember.findMany.mockResolvedValue([{groupId:"group",reason:"test",group:{id:"group",name:"Testlijst"}}]);
     expect((await upload(ITSAPI_ANPR_PATH,fixture())).statusCode).toBe(200);
+    vi.setSystemTime(new Date("2026-10-16T08:05:00.000Z"));
     const retry=fixture();Object.assign(retry.Picture.Plate,{UploadNum:100});
     expect((await upload(ITSAPI_ANPR_PATH,retry)).statusCode).toBe(200);
     expect(db.passage.create).toHaveBeenCalledOnce();expect(db.hit.create).toHaveBeenCalledOnce();
     expect(db.hit.create).toHaveBeenCalledWith({data:expect.objectContaining({notificationStatus:"PENDING",passageId:"stored-passage"})});
     expect(db.attentionAnalysisJob.create).toHaveBeenCalledOnce();
+    expect(db.passage.create.mock.calls[0][0].data.timestamp).toEqual(new Date("2026-10-16T08:00:00.000Z"));
+    expect(db.passage.update).not.toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({timestamp:expect.any(Date)})}));
+    const eventKeys=db.passage.findFirst.mock.calls.map(([args]: [{where:{sourceEventId:string}}])=>args.where.sourceEventId);
+    expect(new Set(eventKeys).size).toBe(1);
   });
   it.each([ITSAPI_HEARTBEAT_PATH,ITSAPI_ANPR_PATH])("weigert onbekende Device ID op %s",async path=>{
     const passage=fixture();passage.Picture.SnapInfo.DeviceID="other";

@@ -14,3 +14,20 @@ describe("Dahua provider adapter",()=>{
     expect(onEvent).toHaveBeenCalledOnce();expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({overviewImage:{contentType:"image/jpeg",data:jpeg(1)},plateImage:{contentType:"image/jpeg",data:jpeg(2)},extraImage:{contentType:"image/jpeg",data:jpeg(3)},rawMetadata:expect.objectContaining({imagePlateStatus:"RECEIVED",imageVehicleStatus:"RECEIVED"})}));
   });
 });
+
+it("preserves first metadata receipt while waiting for images",async()=>{
+  vi.useFakeTimers({toFake:["Date"]});
+  const receipt=new Date("2026-10-16T08:00:00Z");
+  vi.setSystemTime(receipt);
+  try {
+    const consume=vi.fn(async(_response:any,options:any)=>{
+      await options.onPart({headers:{"content-type":"text/plain"},body:Buffer.from("Events[0].Code=TrafficJunction\r\nEvents[0].Object.Text=TEST12\r\nEvents[0].UTC=2099-01-01T00:00:00Z")});
+      vi.setSystemTime(new Date("2026-10-16T08:00:10Z"));
+      await options.onPart({headers:{"content-type":"image/jpeg"},body:Buffer.from([255,216,255,217])});
+    });
+    const onEvent=vi.fn();
+    const provider=new DahuaAnprProvider({keyHex:"0".repeat(64),timeoutMs:1000,maxPartBytes:1000,logger:{info:vi.fn(),warn:vi.fn(),error:vi.fn()},openStream:vi.fn().mockResolvedValue({headers:{"content-type":"multipart/x-mixed-replace; boundary=test"}}),consume});
+    await provider.connect(camera,{onConnected:vi.fn(),onEvent},new AbortController().signal);
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({receivedAt:receipt,occurredAt:new Date("2099-01-01T00:00:00Z")}));
+  } finally {vi.useRealTimers()}
+});

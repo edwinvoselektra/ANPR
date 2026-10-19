@@ -21,6 +21,7 @@ export class PassageService {
   }) {}
 
   async store(event: NormalizedAnprEvent, policy: PassagePolicy = {}): Promise<PassageResult> {
+    const receivedAt = new Date(event.receivedAt?.getTime() ?? Date.now());
     const sourceEventId = event.sourceEventId ?? `fallback:${createHash("sha256").update(JSON.stringify([
       event.cameraId, event.normalizedPlate, event.occurredAt.toISOString(), event.lane ?? null
     ])).digest("hex")}`;
@@ -40,7 +41,7 @@ export class PassageService {
         const hash = createHash("sha256").update(image.data).digest("hex");
         if (imageObjects.has(hash)) return imageObjects.get(hash);
         try {
-          const objectId = await this.options.storage.storePassageImage(image, event.occurredAt);
+          const objectId = await this.options.storage.storePassageImage(image, receivedAt);
           imageObjects.set(hash, objectId); stored.push(objectId); return objectId;
         } catch {
           if (policy.requireImagesStored) throw new Error("IMAGE_STORAGE_FAILED");
@@ -59,7 +60,9 @@ export class PassageService {
       const metadata = { ...event.rawMetadata,
         imageOriginalStored: Boolean(overviewObjectId), imagePlateStored: Boolean(plateObjectId), imageVehicleStored: Boolean(extraObjectId),
         directionSource: event.sourceDirection ? "CAMERA_EVENT_MAPPED" : event.direction && event.direction !== "UNKNOWN" ? "NORMALIZED_EVENT" : "UNKNOWN",
-        receivedAt: new Date().toISOString()
+        cameraReportedAt: event.occurredAt.toISOString(),
+        cameraTimeSource: event.rawMetadata?.timeSource ?? "CAMERA_EVENT",
+        timeSource: "SERVER_RECEIPT", receivedAt: receivedAt.toISOString()
       };
       if(event.rawMetadata?.vehicleTypeStatus && event.rawMetadata.vehicleTypeStatus!=="MAPPED") this.options.logger.warn(JSON.stringify({cameraId:camera.id,processingResult:"VEHICLE_TYPE_NOT_MAPPED",reason:event.rawMetadata.vehicleTypeStatus}));
       const result = await this.options.prisma.$transaction(async (tx): Promise<PassageResult> => {
@@ -84,7 +87,7 @@ export class PassageService {
           return { status: "duplicate" };
         }
         const created = await tx.passage.create({ data: {
-          cameraId: camera.id, timezone, timestamp: event.occurredAt, location: event.location ?? camera.location, direction,
+          cameraId: camera.id, timezone, timestamp: receivedAt, location: event.location ?? camera.location, direction,
           originalLicensePlate: event.originalPlate, normalizedLicensePlate: event.normalizedPlate,
           displayLicensePlate: displayLicensePlate(event.originalPlate), plateConfidence: event.confidence,
           plateCountry: event.plateCountry, vehicleType: event.vehicleType ?? "UNKNOWN",
@@ -92,7 +95,7 @@ export class PassageService {
           vehicleImage1ObjectId: overviewObjectId, vehicleImage2ObjectId: extraObjectId, plateImageObjectId: plateObjectId,
           source: "DAHUA_CAMERA", sourceEventId,
           rawEventMetadata: metadata as Prisma.InputJsonValue,
-          expiresAt: calculatePassageExpiry(event.occurredAt),
+          expiresAt: calculatePassageExpiry(receivedAt),
           vehicle: event.vehicleType || event.vehicleColor || event.vehicleBrand ? { create: {
             type: event.vehicleType ?? "UNKNOWN", color: event.vehicleColor ?? "UNKNOWN",
             metadata: event.vehicleBrand ? { brand: event.vehicleBrand } : undefined
@@ -105,11 +108,11 @@ export class PassageService {
         await tx.attentionAnalysisJob.create({data:{passageId:created.id}});
         await detectAndCreateHit(tx, {
           passageId: created.id, cameraId: camera.id, normalizedLicensePlate: event.normalizedPlate,
-          location: event.location ?? camera.location, timestamp: event.occurredAt, direction, source: event.source,
+          location: event.location ?? camera.location, timestamp: receivedAt, direction, source: event.source,
           vehicleImageObjectId: overviewObjectId, plateImageObjectId: plateObjectId
         });
         await tx.camera.update({ where: { id: camera.id }, data: {
-          lastVehicleRegistrationAt: event.occurredAt, lastAnprEventAt: event.occurredAt,
+          lastVehicleRegistrationAt: receivedAt, lastAnprEventAt: receivedAt,
           anprConnectionStatus: "CONNECTED", lastAnprErrorCode: null, lastAnprError: null
         } });
         await policy.onAccepted?.(tx);

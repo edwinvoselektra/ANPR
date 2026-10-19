@@ -55,7 +55,8 @@ export function parseItsapiTollgate(body: unknown, camera: { id: string; timezon
   const p = result.data.Picture, snap = p.SnapInfo;
   const normalizedPlate = normalizeLicensePlate(p.Plate.PlateNumber);
   if (p.Plate.IsExist === false || normalizedPlate.length < 2 || normalizedPlate.length > 20) throw new ItsapiPayloadError("INVALID_PLATE");
-  // Milliseconds are significant for idempotence. Never substitute the receive time.
+  // Camera time identifies retries only. PassageService records server receipt time.
+  // Preserve milliseconds and the existing event key across this change.
   const rawTime = snap.AccurateTime || snap.SnapTime;
   const fraction = rawTime?.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.(\d{1,3})$/);
   const baseTime = parseCameraTime(fraction?.[1] ?? rawTime ?? undefined, camera.timezone);

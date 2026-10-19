@@ -2,7 +2,7 @@ import type { VehicleColor, VehicleType } from "@prisma/client";
 import { mapCameraDirection, normalizeLicensePlate, parseCameraTime, resolveTimeZone, type CameraSourceDirection } from "@anpr/shared";
 import type { EventImage, ManagedAnprCamera, NormalizedAnprEvent } from "../types.js";
 
-export type DahuaRawEvent = { fields: Record<string, string>; overviewImage?: EventImage; plateImage?: EventImage; extraImage?: EventImage; imageDiagnostics?: Record<string,string> };
+export type DahuaRawEvent = { receivedAt?: Date; fields: Record<string, string>; overviewImage?: EventImage; plateImage?: EventImage; extraImage?: EventImage; imageDiagnostics?: Record<string,string> };
 
 export function parseDahuaFields(body: Buffer): Record<string, string> {
   if (body.length > 256_000) throw new Error("EVENT_METADATA_TOO_LARGE");
@@ -59,7 +59,7 @@ function safeMetadata(fields: Record<string, string>) {
   return result;
 }
 
-export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEvent, receivedAt = new Date()): NormalizedAnprEvent | null {
+export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEvent, receivedAt = raw.receivedAt ?? new Date()): NormalizedAnprEvent | null {
   if (suffix(raw.fields, ["Code"]) !== "TrafficJunction") return null;
   const action = suffix(raw.fields, ["Action"]);
   if (action && action !== "Pulse" && action !== "Start") return null;
@@ -82,7 +82,7 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
   const physicalDirection=sourceDirection(rawDirection);
   const timeField=["RealUTC","UTC","SnapTime","Time"].find(field=>parseCameraTime(suffix(raw.fields,[field]),timeZone));
   return {
-    cameraId: camera.id,
+    cameraId: camera.id, receivedAt,
     occurredAt: (timeField?parseCameraTime(suffix(raw.fields,[timeField]),timeZone):undefined)??receivedAt,
     originalPlate,
     normalizedPlate,

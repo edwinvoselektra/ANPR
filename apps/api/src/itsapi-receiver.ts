@@ -21,12 +21,14 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
     // The receiver owns logging; do not forward arbitrary provider messages.
     logger: { info() {}, warn() {}, error() {} },
   });
+  const receivedTimes = new WeakMap<object, Date>();
   const identities = new WeakMap<object, { cameraId: string; version: number; digestAuthenticated: boolean; sourceIp: string }>();
   let concurrent = 0;
   const slots = new WeakSet<object>();
   app.addHook("onRequest", async (request, reply) => {
     if (request.url === "/health" && request.method === "GET") return;
     if (concurrent >= 4) return reply.code(503).header("Retry-After","5").send({ error: "RECEIVER_BUSY" });
+    receivedTimes.set(request, new Date());
     concurrent++; slots.add(request);
   });
   app.addHook("preValidation", async (request, reply) => {
@@ -152,6 +154,7 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
       if (!registration.camera.active || registration.camera.isDraft) throw new ItsapiPayloadError("CAMERA_NOT_ACTIVE");
       const parsed = parseItsapiTollgate(request.body, {id:identity.cameraId,timezone:resolveTimeZone(registration.camera.vpnLocation?.timezone,config.PLATFORM_TIMEZONE),directionMapping:registration.camera.directionMapping});
       if (parsed.deviceId !== registration.expectedDeviceId) throw new ItsapiPayloadError("DEVICE_ID_MISMATCH");
+      parsed.event.receivedAt = receivedTimes.get(request)!;
       parsed.event.rawMetadata = {...parsed.event.rawMetadata,configVersion:identity.version};
       await passageService.store(parsed.event, { requireImagesStored:true,expectedProvider:"DAHUA_ITSAPI",expectedConfigVersion:identity.version,
         onAccepted:tx=>accept(tx,identity,parsed.deviceId,"passage"),

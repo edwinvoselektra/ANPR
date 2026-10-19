@@ -19,7 +19,7 @@ TollgateInfo: één object onder `Picture`, geen batch of multipart.
 | `Plate.PlateNumber` | Verplicht kenteken; origineel, genormaliseerd en weergavewaarde in passage |
 | `Plate.IsExist` | Indien false: geen passage; 422 |
 | `SnapInfo.DeviceID` | Verplicht; exact vergelijken met registratie |
-| `SnapInfo.AccurateTime`, anders `SnapTime` | Verplichte gebeurtenistijd; milliseconden behouden |
+| `SnapInfo.AccurateTime`, anders `SnapTime` | Verplichte cameratijd voor stabiele eventidentiteit en diagnose; milliseconden behouden. Niet de geregistreerde passagetijd |
 | `Plate.Channel` | Onderdeel van eventidentiteit; standaard 0 |
 | `Plate.Confidence` | Optioneel geheel getal 0–255, opgeslagen als waarde / 255 |
 | `Vehicle.VehicleType` | Bekende teksttypen naar platformenum; anders UNKNOWN |
@@ -34,7 +34,13 @@ TollgateInfo: één object onder `Picture`, geen batch of multipart.
 
 Niet herkende richtingswaarden, waaronder `Obverse` en `Reverse`, worden als `rawDirection` bewaard en geven richting UNKNOWN. Hun relatie tot de opgestelde camera is nog niet vastgesteld; er wordt geen rijrichting verzonnen. Ook de confidence-schaal 0–255 moet bij de fysieke camera worden bevestigd. Ontbrekende of onbruikbare optionele voertuigmetadata blokkeert geen passage.
 
-Tijd zonder offset gebruikt de tijdzone van de cameralocatie, anders `PLATFORM_TIMEZONE`. Ongeldige tijden en dubbelzinnige of niet-bestaande lokale zomertijdmomenten worden geweigerd. Er is **geen ontvangsttijd-fallback**, omdat die retries tot nieuwe events zou maken.
+Nieuwe echte camerapassages gebruiken **serverontvangsttijd** als `Passage.timestamp`. ITSAPI legt deze eenmaal vast bij het begin van het HTTP-verzoek, vóór bodyverwerking en authenticatie. De CGI-provider legt ontvangst van de eventmetadata vast vóór het wachten op afbeeldingen of eerdere verwerking. De gedeelde passageverwerking gebruikt hetzelfde tijdstip voor passage, hit, watchlistgeldigheid, bewaartermijn, afbeeldingsopslagpad en camerastatus. De bestaande locatie-/platformtijdzone bepaalt alleen de lokale weergave. Een verkeerd ingestelde cameraklok verschuift deze tijdstippen niet.
+
+De cameratijd blijft in `rawEventMetadata.cameraReportedAt` (UTC) en `cameraTimeSource` beschikbaar; `timeSource` is `SERVER_RECEIPT` en `receivedAt` bevat dezelfde serverontvangsttijd als de passage. De cameratijd blijft onderdeel van de bestaande eventidentiteit, zodat retries en later ontvangen afbeeldingen dezelfde passage aanvullen zonder tijd, hit of analysetaak opnieuw aan te maken. Een retry die al vóór deze wijziging opgeslagen was, behoudt eveneens de bestaande tijd.
+
+Voor die identiteit gebruikt ITSAPI bij een cameratijd zonder offset de tijdzone van de cameralocatie, anders `PLATFORM_TIMEZONE`. Ongeldige tijden en dubbelzinnige of niet-bestaande lokale zomertijdmomenten worden nog steeds geweigerd: ontvangsttijd wordt nooit in de eventkey gebruikt. Een correct gevormde maar inhoudelijk verkeerde cameraklok wordt wel geaccepteerd.
+
+Bij vertraagde uploads is de passagetijd dus het moment van ontvangst, niet het fysieke detectiemoment. Alle camera’s delen de serverklok; die moet via de normale server-tijdsynchronisatie correct blijven. Historische passages worden niet herschreven. Er is geen database-migratie nodig.
 
 Ontbrekende beelden of lege `Content` zijn toegestaan. Aangeleverde beelden moeten canonieke base64 met JPEG-begin/eindmarkeringen zijn, maximaal 8 MB per beeld en gezamenlijk binnen de 16 MB requestlimiet. Dit is formaat-/groottevalidatie, geen volledige JPEG-decodering. Geen downloads vanaf payload-URL's, geen gebruik van `PicName` als opslagpad en geen beeldbewerking in de API. De modulaire async opslagprovider schrijft naar disk/NAS; PostgreSQL bevat alleen objectverwijzingen. Een ongeldige aangeleverde afbeelding geeft 422; een opslagfout geeft 503.
 

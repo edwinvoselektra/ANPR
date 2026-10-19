@@ -4,7 +4,10 @@ import type { CameraSourceDirection } from "./index.js";
 export type EventImage = { contentType: "image/jpeg"; data: Buffer };
 export type NormalizedAnprEvent = {
   cameraId: string;
+  // Camera-reported time is retained for event identity and diagnostics.
   occurredAt: Date;
+  // Trusted server ingress time; never read from a camera payload.
+  receivedAt?: Date;
   originalPlate: string;
   normalizedPlate: string;
   plateCountry?: string;

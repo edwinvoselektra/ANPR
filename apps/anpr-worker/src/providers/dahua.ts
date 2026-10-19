@@ -48,6 +48,7 @@ export class DahuaAnprProvider implements AnprEventProvider {
     const onPart = async (part: MultipartPart) => {
       const contentType = part.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
       if (contentType === "text/plain") {
+        const receivedAt = new Date();
         const fields = parseDahuaFields(part.body);
         // Some firmwares send an empty text heartbeat after the images. Treat
         // that as an event boundary so the pending event can be stored now.
@@ -57,7 +58,7 @@ export class DahuaAnprProvider implements AnprEventProvider {
         }
         flush();
         await chain;
-        pending = { fields };
+        pending = { fields, receivedAt };
         schedule();
       } else if (contentType === "image/jpeg" && pending) {
         const split = splitDahuaImages(pending.fields,part.body);

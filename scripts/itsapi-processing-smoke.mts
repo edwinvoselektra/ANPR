@@ -32,32 +32,41 @@ try {
  assert.equal((await send(heartbeat,{Active:"keepAlive",DeviceID:"wrong"})).statusCode,403);
  assert.equal((await send(tollgate,payload,"wrong")).statusCode,401);
  // Concurrent uploads exercise the real camera row lock and unique constraint.
+ const receiptStart=new Date();
  const responses=await Promise.all([send(tollgate,payload),send(tollgate,payload)]);
  assert(responses.every(r=>r.statusCode===200),responses.map(r=>r.statusCode).join(","));
  assert.equal(await db.passage.count({where:{cameraId}}),1);
  assert.equal(await db.hit.count({where:{cameraId}}),1);
+ const receiptEnd=new Date();
  const passage=await db.passage.findFirstOrThrow({where:{cameraId}});
+ assert(passage.timestamp>=receiptStart&&passage.timestamp<=receiptEnd);
+ assert.equal((passage.rawEventMetadata as Record<string,unknown>).timeSource,"SERVER_RECEIPT");
+ assert.equal((passage.rawEventMetadata as Record<string,unknown>).cameraReportedAt,"2026-10-02T11:24:56.123Z");
  assert(passage.vehicleImage1ObjectId&&passage.plateImageObjectId&&passage.vehicleImage2ObjectId);
  for(const id of [passage.vehicleImage1ObjectId,passage.plateImageObjectId,passage.vehicleImage2ObjectId])assert((await readFile(resolve(root,id))).equals(jpeg));
  const hit=await db.hit.findFirstOrThrow({where:{cameraId}});let pushes=0;
+ assert.equal(hit.timestamp.getTime(),passage.timestamp.getTime());
  const sender={async send(){pushes++}};
  await dispatchHit(db,hit.id,sender);
  assert.equal((await send(tollgate,payload)).statusCode,200);
  await dispatchHit(db,hit.id,sender);
+ assert.equal((await db.passage.findUniqueOrThrow({where:{id:passage.id}})).timestamp.getTime(),passage.timestamp.getTime());
  assert.equal(pushes,1);assert.equal(await db.notification.count({where:{hitId:hit.id,status:"SENT"}}),1);
  assert.equal(await db.hit.count({where:{cameraId}}),1);
  // Same upload counter with a different timestamp is a new passage.
  const optional={Picture:{Plate:{PlateNumber:"ITS123"},SnapInfo:{DeviceID:deviceId,AccurateTime:"2026-10-02 13:24:57.123"}}};
  assert.equal((await send(tollgate,optional)).statusCode,200);
  assert.equal(await db.passage.count({where:{cameraId}}),2);
+ const beforeEnrichment=await db.passage.findFirstOrThrow({where:{cameraId,id:{not:passage.id}}});
  const late={Picture:{...payload.Picture,SnapInfo:optional.Picture.SnapInfo}};
  assert.equal((await send(tollgate,late)).statusCode,200);
  assert.equal(await db.passage.count({where:{cameraId}}),2);
- const enriched=await db.passage.findFirstOrThrow({where:{cameraId,timestamp:new Date("2026-10-02T11:24:57.123Z")}});
+ const enriched=await db.passage.findFirstOrThrow({where:{id:beforeEnrichment.id}});
+ assert.equal(enriched.timestamp.getTime(),beforeEnrichment.timestamp.getTime());
  assert(enriched.vehicleImage1ObjectId&&enriched.plateImageObjectId&&enriched.vehicleImage2ObjectId);
  assert.equal(await db.hit.count({where:{cameraId}}),2);
  assert.equal((await send(tollgate,{Unexpected:{}})).statusCode,422);
- console.log("PASS: heartbeat, Device ID, Digest, concurrent retry deduplication, three images, optional fields, late images, one push per hit despite camera retry. Synthetic fixtures; no hardware claim.");
+ console.log("PASS: server receipt timestamp, matching hit time, stable time on retry/late images, heartbeat, Device ID, Digest, concurrent retry deduplication, three images, optional fields, late images, one push per hit despite camera retry. Synthetic fixtures; no hardware claim.");
 } finally {
  await app.close();
  await db.passage.deleteMany({where:{cameraId}});

@@ -13,7 +13,7 @@ browservideo en server-side OCR zijn nog niet gebouwd.
 
 ## Mobiel, tijdzones en rijrichting
 
-Live passages en Hits ondersteunen een bewaarde lijst-/tegelkeuze. Locaties hebben een IANA-tijdzone; passage, hit, zoeken en push gebruiken centrale tijd- en richtingverwerking. Zie het [eindrapport en handmatige testplan A–D](docs/mobile-time-direction.md) voor werking en beperkingen. Livebeelden blijven bewust gereserveerd voor een toekomstige fase.
+Live passages en Hits ondersteunen een bewaarde lijst-/tegelkeuze. Locaties hebben een IANA-tijdzone; passage, hit, zoeken en push gebruiken centrale tijd- en richtingverwerking. Zie het [eindrapport en handmatige testplan A–D](docs/mobile-time-direction.md) voor werking en beperkingen. Nieuwe echte camerapassages en hits gebruiken de serverontvangsttijd; de cameratijd blijft alleen beschikbaar voor diagnose en eventherkenning. Bestaande passages worden niet herschreven. Livebeelden blijven bewust gereserveerd voor een toekomstige fase.
 
 Voor administrators toont **Instellingen** daarnaast compact de betrouwbaar meetbare programma-/platformopslag en de laatste twintig gesaneerde auditregels. Andere gebruikers behouden uitsluitend hun eigen pushinstellingen; auditpayloads en geheimen worden niet naar de browser gestuurd.
 
