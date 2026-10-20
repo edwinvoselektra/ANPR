@@ -1,5 +1,8 @@
 # Onderzoek Dahua-rijrichting — 19 oktober 2026
 
+> Vervolg op 20 oktober 2026: productie blijkt via ITSAPI `SnapInfo.Direction=Obverse/Reverse` te sturen. Het [nieuwe onderzoek en herstel](itsapi-direction-fix.md) vervangt de onderstaande ITSAPI-beperking. Dit eerdere rapport beschrijft de toenmalige CGI-historie en bewijsgrenzen.
+
+
 ## Conclusie en afbakening
 
 De lokale overgang naar **Onbekend** ontstaat vóór opslag, bij de richtinginterpretatie. De ontvangen waarde die daadwerkelijk bewaard is, is string `"0"`. Die wordt niet als fysieke rijrichting herkend. Oudere OUTGOING-waarden waren een fallback op de vaste camerainstelling, geen bewezen eventrichting. Commit `9bfc6f3` verwijderde die fallback op 15 september; daarna verschijnen UNKNOWN-records. De frontend geeft de opgeslagen richting correct weer. De richtingkolom is NOT NULL en de relevante migraties zijn toegepast.

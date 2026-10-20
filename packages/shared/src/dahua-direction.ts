@@ -9,10 +9,16 @@ export function dahuaTravelDirection(value: unknown): CameraSourceDirection | un
   if (["outgoing", "leave", "exit", "out", "away"].includes(text)) return "AWAY_FROM_CAMERA";
 }
 
-export function resolveDahuaDirection(candidates: Array<{ field: string; value: unknown }>) {
+// Adapt the observed ITSAPI SnapInfo Obverse/Reverse tokens to the existing
+// two-state per-camera convention; these are not measured lens angles.
+// Do not apply this profile to CGI JunctionDirection or numeric firmware enums.
+export function resolveDahuaDirection(candidates: Array<{ field: string; value: unknown }>, profile: "TRAVEL" | "ITSAPI_SNAP" = "TRAVEL") {
   const present = candidates.filter(item => item.value !== undefined && item.value !== null && item.value !== "");
   const recognized = present.flatMap(item => {
-    const source = dahuaTravelDirection(item.value);
+    const token = typeof item.value === "string" ? item.value.trim().toLowerCase() : undefined;
+    const source = profile === "ITSAPI_SNAP" && token === "obverse" ? "TOWARD_CAMERA"
+      : profile === "ITSAPI_SNAP" && token === "reverse" ? "AWAY_FROM_CAMERA"
+      : dahuaTravelDirection(item.value);
     return source ? [{ ...item, source }] : [];
   });
   const conflict = new Set(recognized.map(item => item.source)).size > 1;

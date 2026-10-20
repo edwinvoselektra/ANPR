@@ -67,7 +67,7 @@ export function parseItsapiTollgate(body: unknown, camera: { id: string; timezon
   const occurredAt = accurateTime ?? parseTime(snap.SnapTime);
   if (!occurredAt) throw new ItsapiPayloadError("INVALID_EVENT_TIME", ["Picture.SnapInfo.AccurateTime or SnapTime (unambiguous camera-local time)"]);
   // Other ITSAPI field layouts require an actual profile capture before mapping.
-  const resolvedDirection = resolveDahuaDirection([{ field: "Picture.SnapInfo.Direction", value: snap.Direction }]);
+  const resolvedDirection = resolveDahuaDirection([{ field: "Picture.SnapInfo.Direction", value: snap.Direction }], "ITSAPI_SNAP");
   const sourceDirection = resolvedDirection.sourceDirection;
   const sourceEventId = `itsapi:picture:v1:${createHash("sha256").update(JSON.stringify([
     camera.id, snap.DeviceID, occurredAt.toISOString(), normalizedPlate, p.Plate.Channel ?? 0,
@@ -82,7 +82,7 @@ export function parseItsapiTollgate(body: unknown, camera: { id: string; timezon
     sourceDirection, direction: mapCameraDirection(sourceDirection, camera.directionMapping),
     lane: snap.LanNo ?? undefined, location: snap.SnapAddress || undefined,
     overviewImage: decodeImage(p.NormalPic), plateImage: decodeImage(p.CutoutPic), extraImage: decodeImage(p.VehiclePic),
-    rawMetadata: { provider:"DAHUA_ITSAPI", profile:"picture-v1", timeZone:camera.timezone,
+    rawMetadata: { provider:"DAHUA_ITSAPI", profile:"picture-v1", timeZone:camera.timezone, directionMapping:camera.directionMapping,
       timeSource:accurateTime ? "AccurateTime" : "SnapTime", confidenceScale:255,
       ...(snap.Direction != null ? { rawDirection:snap.Direction } : {}),
       rawDirectionField: resolvedDirection.field ?? "NOT_RECEIVED", directionStatus: resolvedDirection.status,

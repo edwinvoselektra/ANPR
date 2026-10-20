@@ -8,6 +8,9 @@ describe("Dahua travel direction evidence", () => {
   it.each([0,1,2,"0","1","2","Approaching","Leaving","Reverse","Obverse","Head","FutureFirmware",undefined])("does not guess %s", value => {
     expect(resolveDahuaDirection([{field:"Direction",value}]).sourceDirection).toBeUndefined();
   });
+  it.each([["Obverse","TOWARD_CAMERA"],["Reverse","AWAY_FROM_CAMERA"],[" oBvErSe ","TOWARD_CAMERA"],[" REVERSE ","AWAY_FROM_CAMERA"],["Unknown",undefined],[undefined,undefined],["FutureFirmware",undefined],[0,undefined]])("maps ITSAPI SnapInfo %s only in its profile", (value,expected) => {
+    expect(resolveDahuaDirection([{field:"Picture.SnapInfo.Direction",value}],"ITSAPI_SNAP").sourceDirection).toBe(expected);
+  });
   it("rejects conflicting explicit directions", () => {
     expect(resolveDahuaDirection([{field:"DrivingDirection[0]",value:"Approach"},{field:"Direction",value:"Leave"}])).toMatchObject({status:"CONFLICTING_VALUES",sourceDirection:undefined});
   });

@@ -355,7 +355,7 @@ export default function CameraWizard() {
               <div className="field"><label htmlFor="camera-name">Cameranaam *</label><input id="camera-name" value={form.name} onChange={(event) => set("name", event.target.value)} placeholder="Bijvoorbeeld Uddel Noord" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "camera-name-error" : undefined} />{nameError ? <small id="camera-name-error" className="field-error" role="alert">{nameError}</small> : null}</div>
               <div className="field"><label>Locatie *</label><input value={form.location} onChange={(event) => set("location", event.target.value)} placeholder="Straat of gebied" /></div>
               <div className="field full"><label>Omschrijving</label><textarea value={form.description} onChange={(event) => set("description", event.target.value)} placeholder="Aanvullende informatie" /></div>
-              <div className="field"><label>Fysieke richtingsmapping</label><select value={form.directionMapping} onChange={(event) => set("directionMapping", event.target.value)}><option value="TOWARD_CAMERA_IS_INCOMING">Naar camera toe = Inkomend</option><option value="AWAY_FROM_CAMERA_IS_INCOMING">Van camera af = Inkomend</option></select><small>Kies welke fysieke beweging voor deze opstelling als inkomend geldt.</small></div><div />
+              <div className="field"><label className="checkbox"><input type="checkbox" checked={form.directionMapping === "AWAY_FROM_CAMERA_IS_INCOMING"} onChange={event => set("directionMapping", event.target.checked ? "AWAY_FROM_CAMERA_IS_INCOMING" : "TOWARD_CAMERA_IS_INCOMING")}/>Richting omkeren</label><small>Gebruik dit wanneer inkomend en uitgaand voor deze cameramontage omgekeerd worden weergegeven. Alleen nieuwe passages worden beïnvloed.</small></div><div />
               <div className="field"><label>Latitude</label><input type="number" step="any" value={form.latitude} onChange={(event) => set("latitude", event.target.value)} placeholder="52.25" /><small>Kaartselectie is TODO voor een latere interfacefase; coördinaten werken nu al.</small></div>
               <div className="field"><label>Longitude</label><input type="number" step="any" value={form.longitude} onChange={(event) => set("longitude", event.target.value)} placeholder="5.78" /></div>
             </div>
@@ -428,7 +428,7 @@ export default function CameraWizard() {
             <div className="summary">
               <StatusRow label="Naam" value={form.name} />
               <StatusRow label="Locatie" value={form.location} />
-              <StatusRow label="Richtingsmapping" value={form.directionMapping === "TOWARD_CAMERA_IS_INCOMING" ? "Naar camera toe = Inkomend" : "Van camera af = Inkomend"} />
+              <StatusRow label="Richting omkeren" value={form.directionMapping === "AWAY_FROM_CAMERA_IS_INCOMING" ? "Aan" : "Uit"} />
               <StatusRow label="Herkenningszone" value={zone.length ? "Ingesteld" : "Niet ingesteld (optioneel)"} tone={zone.length ? "success" : "warning"} detail={zone.length ? undefined : "De camera kan worden opgeslagen; stel de zone later in zodra een snapshot beschikbaar is."} />
             </div>
             <label className="checkbox" style={{ marginTop: 20 }}><input type="checkbox" checked={form.active} onChange={(event) => set("active", event.target.checked)} />Camera na opslaan activeren</label>

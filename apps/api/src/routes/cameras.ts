@@ -4,7 +4,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { z } from "zod";
-import { normalizeCameraHost, PERMISSIONS } from "@anpr/shared";
+import { normalizeCameraHost, PERMISSIONS, CAMERA_DIRECTION_MAPPINGS } from "@anpr/shared";
 import { config } from "../config.js";
 import { audit } from "../lib/audit.js";
 import { requireAdmin, requirePermission } from "../lib/auth.js";
@@ -46,10 +46,15 @@ const cameraBody = rtspFields.merge(z.object({
   if(value.rtspEnabled&&value.connectionMode==="URL"&&!value.rtspUrl)ctx.addIssue({code:"custom",message:"RTSP URL is verplicht.",path:["rtspUrl"]});
   if(value.rtspEnabled&&value.connectionMode==="FIELDS"&&!value.rtspHost&&!value.dahuaTcp?.host)ctx.addIssue({code:"custom",message:"IP-adres of hostnaam is verplicht voor RTSP.",path:["rtspHost"]});
 });
+const nullableCoordinate = (min: number, max: number) => z.preprocess(
+  value => typeof value === "string" && !value.trim() ? null : value,
+  z.coerce.number().min(min).max(max).nullable().optional()
+);
+const directionMapping = z.enum(CAMERA_DIRECTION_MAPPINGS, {errorMap:()=>({message:"Kies een geldige fysieke richtingsmapping."})});
 const updateBody = z.object({
   name: z.string().trim().min(2).max(100).optional(), location: z.string().trim().min(2).max(150).optional(),
-  description: z.string().trim().max(1000).optional(), direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]).optional(), directionMapping: z.enum(["TOWARD_CAMERA_IS_INCOMING", "AWAY_FROM_CAMERA_IS_INCOMING"]).optional(),
-  latitude: z.coerce.number().min(-90).max(90).nullable().optional(), longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
+  description: z.string().trim().max(1000).nullable().optional(), direction: z.enum(["INCOMING", "OUTGOING", "BOTH"]).optional(), directionMapping: directionMapping.optional(),
+  latitude: nullableCoordinate(-90,90), longitude: nullableCoordinate(-180,180),
   active: z.boolean().optional(), displayOrder: z.coerce.number().int().min(0).max(10_000).optional(),
   offlineTimeoutSeconds: z.coerce.number().int().min(30).max(86_400).optional(), zone: zone.optional(),
   connectionMode: z.enum(["URL", "FIELDS"]).optional(), rtspUrl: z.string().max(2048).optional(),

@@ -5,6 +5,8 @@ import { formatLocalDate } from "@anpr/shared";
 import { createDigestAuthorization } from "@anpr/shared/dahua";
 import { buildItsapiReceiver } from "./itsapi-receiver.js";
 import { encryptSecret } from "./lib/crypto.js";
+import { publicHit } from "./lib/public-hit.js";
+import { payloadFor } from "./lib/notification-dispatcher.js";
 import { ITSAPI_ANPR_PATH, ITSAPI_HEARTBEAT_PATH } from "./lib/itsapi-protocol.js";
 vi.mock("./lib/prisma.js", () => ({ prisma: {} }));
 
@@ -138,11 +140,14 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
     db.plateGroupMember.findMany.mockResolvedValue([{groupId:"group",reason:"test",group:{id:"group",name:"Testlijst"}}]);
     expect((await upload(ITSAPI_ANPR_PATH,fixture())).statusCode).toBe(200);
     vi.setSystemTime(new Date("2026-10-16T08:05:00.000Z"));
+    (await db.itsapiRegistration.findUnique()).camera.directionMapping="AWAY_FROM_CAMERA_IS_INCOMING";
     const retry=fixture();Object.assign(retry.Picture.Plate,{UploadNum:100});
     expect((await upload(ITSAPI_ANPR_PATH,retry)).statusCode).toBe(200);
     expect(db.passage.create).toHaveBeenCalledOnce();expect(db.hit.create).toHaveBeenCalledOnce();
     expect(db.hit.create).toHaveBeenCalledWith({data:expect.objectContaining({notificationStatus:"PENDING",passageId:"stored-passage"})});
     expect(db.attentionAnalysisJob.create).toHaveBeenCalledOnce();
+    expect(db.passage.create.mock.calls[0][0].data.direction).toBe("INCOMING");
+    expect(db.passage.update.mock.calls.every(([input]:any[])=>input.data.direction===undefined)).toBe(true);
     expect(db.passage.create.mock.calls[0][0].data.timestamp).toEqual(new Date("2026-10-16T08:00:00.000Z"));
     expect(db.passage.update).not.toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({timestamp:expect.any(Date)})}));
     const eventKeys=db.passage.findFirst.mock.calls.map(([args]: [{where:{sourceEventId:string}}])=>args.where.sourceEventId);
@@ -201,9 +206,12 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
 });
 
 
-describe("ITSAPI direction contracts (synthetic, no local ITSAPI capture available)",()=>{
+describe("ITSAPI direction contracts (production direction observations in synthetic envelopes)",()=>{
   it.each([
-    ["Approach","INCOMING"],["Leave","OUTGOING"],["Incoming","INCOMING"],["Outgoing","OUTGOING"],
+    // Exact tokens and path reported from production tcpdump, 2026-10-20.
+    // Envelope, plate, identity, times and JPEG remain synthetic contract data.
+    ["Obverse","INCOMING"],["Reverse","OUTGOING"],[" obverse ","INCOMING"],[" REVERSE ","OUTGOING"],
+    ["Approach","INCOMING"],["Leave","OUTGOING"],["Incoming","INCOMING"],["Outgoing","OUTGOING"],["Unknown","UNKNOWN"],
     [0,"UNKNOWN"],[1,"UNKNOWN"],[2,"UNKNOWN"],["0","UNKNOWN"],
     ["Approaching","UNKNOWN"],["Leaving","UNKNOWN"],["FutureFirmware","UNKNOWN"],[undefined,"UNKNOWN"]
   ])("stores %s as %s without guessing firmware enums",async(value,expected)=>{
@@ -212,7 +220,36 @@ describe("ITSAPI direction contracts (synthetic, no local ITSAPI capture availab
     expect((await upload(ITSAPI_ANPR_PATH,body)).statusCode).toBe(200);
     expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({direction:expected,timestamp:new Date("2026-10-16T08:00:00Z")})});
     expect(db.hit.create).toHaveBeenCalledOnce();expect(db.attentionAnalysisJob.create).toHaveBeenCalledOnce();
-    if(value!==undefined)expect(db.passage.create.mock.calls[0][0].data.rawEventMetadata.rawDirection).toBe(value);
+    const stored=db.passage.create.mock.calls[0][0].data;
+    const hit={id:"hit",...db.hit.create.mock.calls[0][0].data,passage:stored,camera:{name:"Fixture"}};
+    expect(publicHit(hit).passage.direction).toBe(expected);
+    const push=JSON.parse(payloadFor(hit));
+    if(expected==="UNKNOWN")expect(push.body).not.toMatch(/Inkomend|Uitgaand/);
+    else expect(push.body).toContain(expected==="INCOMING"?"Inkomend":"Uitgaand");
+    if(value!==undefined)expect(db.passage.create.mock.calls[0][0].data.rawEventMetadata.rawDirection).toBe(typeof value==="string"?value.trim():value);
+  });
+  it.each([["Obverse","OUTGOING"],["Reverse","INCOMING"],["Unknown","UNKNOWN"],[undefined,"UNKNOWN"],["FutureFirmware","UNKNOWN"]])("reverses %s safely for this camera only",async(value,expected)=>{
+    (await db.itsapiRegistration.findUnique()).camera.directionMapping="AWAY_FROM_CAMERA_IS_INCOMING";
+    const body=fixture();Object.assign(body.Picture.SnapInfo,{Direction:value});
+    expect((await upload(ITSAPI_ANPR_PATH,body)).statusCode).toBe(200);
+    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({direction:expected,rawEventMetadata:expect.objectContaining({directionMapping:"AWAY_FROM_CAMERA_IS_INCOMING"})})});
+  });
+  it("stores two camera mappings independently and keeps the earlier passage unchanged",async()=>{
+    const original=await db.itsapiRegistration.findUnique();
+    const registrations=[original,{...original,cameraId:"camera-b",camera:{...original.camera,id:"camera-b",directionMapping:"AWAY_FROM_CAMERA_IS_INCOMING"}}];
+    let selected=registrations[0];
+    db.itsapiRegistration.findUnique.mockImplementation(async()=>selected);
+    db.itsapiRegistration.findMany.mockImplementation(async()=>[selected]);
+    db.camera.findFirst.mockImplementation(async()=>selected.camera);
+    db.passage.findFirst.mockResolvedValue(null);
+    for(const registration of registrations){
+      selected=registration;
+      const body=fixture();body.Picture.SnapInfo.Direction="Obverse";
+      expect((await upload(ITSAPI_ANPR_PATH,body)).statusCode).toBe(200);
+    }
+    const records=db.passage.create.mock.calls.map(([input]:any[])=>input.data);
+    expect(records.map((record:any)=>[record.cameraId,record.direction])).toEqual([["fixture-camera","INCOMING"],["camera-b","OUTGOING"]]);
+    expect(db.passage.update.mock.calls.every(([input]:any[])=>input.data.direction===undefined)).toBe(true);
   });
   it("respects the reversed physical camera mapping",async()=>{
     (await db.itsapiRegistration.findUnique()).camera.directionMapping="AWAY_FROM_CAMERA_IS_INCOMING";

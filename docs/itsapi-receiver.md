@@ -25,14 +25,14 @@ TollgateInfo: één object onder `Picture`, geen batch of multipart.
 | `Vehicle.VehicleType` | Bekende teksttypen naar platformenum; anders UNKNOWN |
 | `Vehicle.VehicleColor` | Bekende tekstkleuren naar platformenum; anders OTHER |
 | `Vehicle.VehicleSign` | Optioneel merk |
-| `SnapInfo.Direction` | Expliciete traveltekst (o.a. Approach/Incoming en Leave/Away/Outgoing) via gedeelde fysieke camerarichtingmapping; numerieke waarden bewaard maar niet gegokt |
+| `SnapInfo.Direction` | Obverse/Reverse en bestaande expliciete traveltekst via per-camera Richting omkeren; numerieke waarden bewaard maar niet gegokt |
 | `SnapInfo.SnapAddress` | Optionele passagelocatie; anders geconfigureerde cameralocatie |
 | `SnapInfo.LanNo` | Optionele rijstrook |
 | `NormalPic.Content` | Original Image, base64 JPEG |
 | `CutoutPic.Content` | Plate Cutout, base64 JPEG |
 | `VehiclePic.Content` | Vehicle Body Cutout, base64 JPEG |
 
-Niet herkende richtingswaarden, waaronder `Obverse` en `Reverse`, worden als `rawDirection` bewaard en geven richting UNKNOWN. Hun relatie tot de opgestelde camera is nog niet vastgesteld; er wordt geen rijrichting verzonnen. Ook de confidence-schaal 0–255 moet bij de fysieke camera worden bevestigd. Ontbrekende of onbruikbare optionele voertuigmetadata blokkeert geen passage.
+De gebruiker heeft op productie `Obverse`/`Reverse` waargenomen. In dit SnapInfo-profiel geldt standaard Obverse=Inkomend, Reverse=Uitgaand; de bestaande camera-instelling **Richting omkeren** wisselt dit per montage om. Onbekende waarden worden als `rawDirection` bewaard en blijven UNKNOWN. Zie [onderzoek, tests en praktijktest](itsapi-direction-fix.md). Ook de confidence-schaal 0–255 moet bij de fysieke camera worden bevestigd. Ontbrekende of onbruikbare optionele voertuigmetadata blokkeert geen passage.
 
 Nieuwe echte camerapassages (ITSAPI en CGI) gebruiken **serverontvangsttijd** als `Passage.timestamp`. De ITSAPI-receiver legt `receivedAt` één keer vast aan het begin van het HTTP-verzoek, vóór authenticatie en body-/beeldverwerking. CGI legt ontvangst vast bij de eventmetadata. De gedeelde PassageService gebruikt deze UTC-instant voor passage, hit, groepsgeldigheid, bewaartermijn, opslagpad en camerastatus. Zonder aangeleverd ontvangsttijdstip geldt de servertijd bij ingang van de service. Er is geen cameraklok-override of automatische keuze voor een vermeend gesynchroniseerde camera.
 

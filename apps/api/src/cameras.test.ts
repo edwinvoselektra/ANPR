@@ -222,3 +222,75 @@ describe("camera verwijderen", () => {
     expect(prismaMock.camera.deleteMany).not.toHaveBeenCalled();
   });
 });
+
+
+describe("camera direction inversion configuration",()=>{
+  it.each(["TOWARD_CAMERA_IS_INCOMING","AWAY_FROM_CAMERA_IS_INCOMING"])("persists %s through the existing audited PATCH",async directionMapping=>{
+    const existing={...camera("Fixture"),directionMapping:"TOWARD_CAMERA_IS_INCOMING"};
+    prismaMock.camera.findUniqueOrThrow.mockResolvedValue(existing);
+    prismaMock.camera.update.mockResolvedValue({...existing,directionMapping});
+    app=buildServer();
+    const response=await app.inject({method:"PATCH",url:`/cameras/${cameraId}`,payload:{directionMapping}});
+    expect(response.statusCode).toBe(200);
+    expect(prismaMock.camera.update).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({directionMapping,configVersion:{increment:1}})}));
+    expect(response.json().camera.directionMapping).toBe(directionMapping);
+    expect(prismaMock.auditLog.create).toHaveBeenCalled();
+  });
+  it("uses inversion off when creating a camera without an explicit setting",async()=>{
+    prismaMock.camera.create.mockResolvedValue(camera("Fixture"));
+    app=buildServer();
+    expect((await app.inject({method:"POST",url:"/cameras",payload:createBody("Fixture")})).statusCode).toBe(201);
+    expect(prismaMock.camera.create).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({directionMapping:"TOWARD_CAMERA_IS_INCOMING"})}));
+  });
+});
+
+
+describe("editing existing cameras with empty optional fields",()=>{
+  it("accepts a nullable description and coordinates from an existing camera",async()=>{
+    const existing={...camera("Fixture"),latitude:null,longitude:null};
+    prismaMock.camera.findUniqueOrThrow.mockResolvedValue(existing);
+    prismaMock.camera.update.mockResolvedValue(existing);
+    app=buildServer();
+    const response=await app.inject({method:"PATCH",url:`/cameras/${cameraId}`,payload:{description:null,latitude:null,longitude:null,directionMapping:"AWAY_FROM_CAMERA_IS_INCOMING"}});
+    expect(response.statusCode,JSON.stringify(response.json())).toBe(200);
+  });
+});
+
+
+describe("camera edit partial-update regressions",()=>{
+  it.each([null,"","   "])("keeps blank coordinates %s as null",async value=>{
+    const existing={...camera("Fixture"),latitude:null,longitude:null};
+    prismaMock.camera.findUniqueOrThrow.mockResolvedValue(existing);
+    prismaMock.camera.update.mockResolvedValue(existing);
+    app=buildServer();
+    expect((await app.inject({method:"PATCH",url:`/cameras/${cameraId}`,payload:{latitude:value,longitude:value,directionMapping:"AWAY_FROM_CAMERA_IS_INCOMING"}})).statusCode).toBe(200);
+    expect(prismaMock.camera.update).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({latitude:null,longitude:null})}));
+  });
+  it("preserves stored credentials, nullable fields and legacy direction when only mapping changes",async()=>{
+    const existing={...camera("Fixture"),direction:"UNKNOWN",latitude:null,longitude:null};
+    let persisted={...existing};
+    prismaMock.camera.findUniqueOrThrow.mockResolvedValue(existing);
+    prismaMock.camera.update.mockImplementation(async({data})=>{persisted={...persisted,...Object.fromEntries(Object.entries(data).filter(([,value])=>value!==undefined))};return persisted});
+    app=buildServer();
+    const response=await app.inject({method:"PATCH",url:`/cameras/${cameraId}`,payload:{directionMapping:"AWAY_FROM_CAMERA_IS_INCOMING",username:"",password:""}});
+    expect(response.statusCode).toBe(200);
+    expect(persisted).toMatchObject({direction:"UNKNOWN",description:null,latitude:null,longitude:null,rtspProtocol:existing.rtspProtocol,rtspHost:existing.rtspHost,rtspPath:existing.rtspPath,rtspUsernameEncrypted:existing.rtspUsernameEncrypted,rtspPasswordEncrypted:existing.rtspPasswordEncrypted});
+    expect(prismaMock.deviceConnection.deleteMany).not.toHaveBeenCalled();
+    expect(response.body).not.toContain("encrypted-password");
+  });
+  it("returns a specific field error for an invalid mapping",async()=>{
+    app=buildServer();
+    const response=await app.inject({method:"PATCH",url:`/cameras/${cameraId}`,payload:{directionMapping:"IN"}});
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({error:"VALIDATION_ERROR",fields:{directionMapping:["Kies een geldige fysieke richtingsmapping."]}});
+    expect(prismaMock.camera.update).not.toHaveBeenCalled();
+  });
+  it("rejects invalid coordinates instead of silently clearing them",async()=>{
+    app=buildServer();
+    const response=await app.inject({method:"PATCH",url:`/cameras/${cameraId}`,payload:{latitude:"invalid",longitude:200}});
+    expect(response.statusCode).toBe(400);
+    expect(response.json().fields).toHaveProperty("latitude");
+    expect(response.json().fields).toHaveProperty("longitude");
+    expect(prismaMock.camera.update).not.toHaveBeenCalled();
+  });
+});

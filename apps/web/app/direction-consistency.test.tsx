@@ -35,12 +35,12 @@ describe("direction across passage views",()=>{
       expect((await screen.findAllByText(new RegExp(`^(?:[↓↑] )?${label}$`))).length).toBeGreaterThan(0);
       view.unmount();
     }
-    // Search currently offers a direction filter, not a direction result column.
     render(<SearchPage/>);
     const select=screen.getByRole("option",{name:"Alle richtingen"}).closest("select")!;
     fireEvent.change(select,{target:{value:direction}});
     fireEvent.click(screen.getByRole("button",{name:"Zoeken"}));
     await waitFor(()=>expect(apiMock).toHaveBeenCalledWith(expect.stringContaining(`direction=${direction}`),{cache:"no-store"}));
     expect(await screen.findByText("TEST12")).toBeTruthy();
+    expect(screen.getByRole("cell",{name:new RegExp(label)})).toBeTruthy();
   });
 });

@@ -1,19 +1,18 @@
 # Camerarichting
 
-De camera meldt een fysieke beweging ten opzichte van de lens: `TOWARD_CAMERA` of `AWAY_FROM_CAMERA`. Per camera bepaalt `directionMapping` hoe het platform die bronwaarde omzet:
+Het platform bewaart INCOMING, OUTGOING of UNKNOWN bij de passage. Hitweergave en push gebruiken dezelfde opgeslagen richting.
 
-- `TOWARD_CAMERA_IS_INCOMING`: naar de camera toe wordt **Inkomend**;
-- `AWAY_FROM_CAMERA_IS_INCOMING`: van de camera af wordt **Inkomend**.
+**Camera's → camera bewerken → Richting omkeren** wisselt inkomend en uitgaand om voor nieuwe passages van die camera. Ook beschikbaar bij toevoegen, standaard Uit. UNKNOWN blijft altijd UNKNOWN. Oude passages en hits worden niet herschreven.
 
-Een ontbrekende of niet-herkende bronrichting wordt **Onbekend**. Het platform gebruikt daarvoor geen oude algemene camerawaarde als gok. De simulator ontvangt al een genormaliseerde keuze (**Inkomend**, **Uitgaand** of **Onbekend**) en past de fysieke mapping niet toe.
+De schakelaar hergebruikt het bestaande Camera.directionMapping:
 
-De migratie voegt alleen de configuratiekolom toe. Bestaande passages en hits worden niet achteraf aangepast. Pushmeldingen gebruiken de genormaliseerde richting die bij de passage is opgeslagen.
+- Uit: TOWARD_CAMERA_IS_INCOMING (bestaande veilige default);
+- Aan: AWAY_FROM_CAMERA_IS_INCOMING.
 
+Bij CGI meldt `TrafficCar.DrivingDirection[0]` een expliciete beweging, bijvoorbeeld Approach/Leave. De bestaande mapping bepaalt welke beweging als inkomend geldt. Bij ITSAPI zijn in productie `Picture.SnapInfo.Direction=Obverse/Reverse` waargenomen. Alleen dat profiel vertaalt deze tokens naar de bestaande mappingconventie: met Uit wordt Obverse Inkomend en Reverse Uitgaand. Dit is geen universele fysieke lensrichting; test de montage en zet zo nodig omkeren aan.
 
-## Veldselectie en veilige diagnose
+Niet-herkende waarden, numerieke enums zonder bevestigde betekenis en ontbrekende richting blijven UNKNOWN. De oude vaste Camera.direction is geen fallback. De simulator ontvangt rechtstreeks een genormaliseerde richting en bewijst geen Dahua-parsing.
 
-CGI probeert `TrafficCar.DrivingDirection[0]` en de bestaande `Direction`-velden. Alleen expliciete ondersteunde tekst (`Approach`, `Leave` en de bestaande tekstaliassen) levert een fysieke richting op. `DrivingDirection[1]`/`[2]` zijn geen travel-enums en worden niet als richting gelezen. Botsende bekende richtingen geven UNKNOWN. ITSAPI blijft op het Picture-profiel `SnapInfo.Direction`; andere veldlayouts worden eerst veilig onderzocht.
+De camera-PATCH behoudt rechten, audit en configVersion. De gebruikte mapping blijft bij nieuwe ITSAPI-passages in metadata beschikbaar. Geen nieuwe migration nodig. Zie [ITSAPI-productieonderzoek en testplan](itsapi-direction-fix.md) en het [eerdere CGI-historieonderzoek](dahua-direction-investigation.md).
 
-De lokale camera leverde in bewaarde metadata steeds string `"0"`. Oudere OUTGOING-records kwamen uit de inmiddels verwijderde camerafallback. Nieuwe code maakt van `0`, `1`, `2`, `Obverse`, `Reverse`, `Head`, `Approaching` of `Leaving` geen onbewezen fysieke richting. De huidige mapping van deze camera moet nog met een passage in beide fysieke richtingen worden geverifieerd. Zie [volledig onderzoeksrapport](dahua-direction-investigation.md).
-
-Nieuwe CGI-metadata bevat `rawDirectionField`, `directionStatus` en een begrensde `directionEvidenceJson` zonder vrije tekst of wegnamen. De bestaande tijdelijke ITSAPI-debugperiode logt alleen toegestane richtingwaarden en typen; onbekende waarden worden weggelaten. Zonder ingeschakelde debugperiode worden die waarden niet naar het receiverlog geschreven.
+De bestaande tijdelijke ITSAPI-debugperiode toont uitsluitend begrensde richtingvelden en toegestane tokens/typen; geen vrije tekst, kentekens, beelden of credentials. CGI bewaart begrensde directionEvidenceJson zonder wegnamen.

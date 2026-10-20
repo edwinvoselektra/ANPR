@@ -11,11 +11,13 @@ browservideo en server-side OCR zijn nog niet gebouwd.
 > **Belangrijk:** demo-passages zijn geen echte ANPR-detecties. De interface toont ze
 > altijd met bron `DEMO`.
 
+Bestaande camera’s bewerken gebruikt gedeeltelijke PATCH-updates: alleen gewijzigde velden worden verstuurd, lege optionele velden en opgeslagen credentials blijven behouden. Zie [onderzoek en lokaal testplan voor camera-updatevalidatie](docs/camera-edit-validation.md).
+
 ## Mobiel, tijdzones en rijrichting
 
 Live passages en Hits ondersteunen een bewaarde lijst-/tegelkeuze. Locaties hebben een IANA-tijdzone; passage, hit, zoeken en push gebruiken centrale tijd- en richtingverwerking. Zie het [eindrapport en handmatige testplan A–D](docs/mobile-time-direction.md) voor werking en beperkingen. Nieuwe echte camerapassages en hits gebruiken de serverontvangsttijd als UTC-tijdstip, onafhankelijk van de cameraklok. De interface toont dit in de IANA-tijdzone van de cameralocatie, inclusief automatische zomer-/wintertijd. Dahua `AccurateTime`/`SnapTime` blijft uitsluitend beschikbaar voor diagnose en eventherkenning. Vanuit passage- en kentekendetail kun je actieve groepen koppelen en koppelingen verwijderen; zie [tijd- en groepsherstel met lokaal testplan](docs/passage-time-groups.md). Bestaande passages worden niet herschreven. Livebeelden blijven bewust gereserveerd voor een toekomstige fase.
 
-De rijrichting gebruikt expliciete Dahua-eventrichting en de ingestelde camerarichtingmapping. CGI ondersteunt nu ook `TrafficCar.DrivingDirection[0]`; numerieke of onbevestigde firmwarewaarden blijven Onbekend. Zie [onderzoek met echte lokale historie, grenzen en praktijktest](docs/dahua-direction-investigation.md).
+De rijrichting gebruikt expliciete Dahua-eventrichting en de ingestelde camerarichtingmapping. CGI ondersteunt nu ook `TrafficCar.DrivingDirection[0]`; numerieke of onbevestigde firmwarewaarden blijven Onbekend. ITSAPI ondersteunt `Picture.SnapInfo.Direction=Obverse/Reverse`, met **Richting omkeren** per camera (standaard Uit). Zie [productieoorzaak, tests, historie en lokaal testplan](docs/itsapi-direction-fix.md) en het [eerdere CGI-onderzoek](docs/dahua-direction-investigation.md).
 
 Dashboard **Passages vandaag** en **Recente passages** delen dezelfde platformdag en primaire passagetijd. De lijst toont de nieuwste acht van vandaag; toekomstige historische timestamps worden voor beide uitgesloten. Zie [dashboardonderzoek en regressietests](docs/dashboard-recent-passages.md).
 
@@ -130,7 +132,7 @@ Stop het volgen van logs met `Ctrl+C`; de containers blijven draaien.
 
 Afwijkende RTSP-gegevens en de bestaande transport-/zonewizard staan onder **Geavanceerd**. De bestaande CGI-eventstream blijft beschikbaar als alternatief; dit is geen ITSAPI. VPN is behouden.
 
-**ITSAPI-status:** afzonderlijke heartbeat- en TollgateInfo-handlers voor het Picture-profiel, met Device-ID-validatie, optionele Digest per camera, passage- en beeldopslag, bestaande watchlist/push-keten en idempotente retries. Zonder Digest accepteert de receiver uitsluitend het geconfigureerde Device ID vanaf het vaste camera-IP; doorgestuurde IP-headers worden niet vertrouwd. Succes-ACK volgt alleen na verwerking. PostgreSQL-integratie met synthetische uploads en push-stub getest; compatibiliteit met de fysieke camera op `192.168.178.248` en ACK-acceptatie nog niet bevestigd. Doeladres volgens de huidige gebruikerswaarneming: `192.168.178.52:7070`. Zie [ondersteunde velden, beperkingen, lokale tests en exacte uitrolcommando’s](docs/itsapi-receiver.md).
+**ITSAPI-status:** afzonderlijke heartbeat- en TollgateInfo-handlers voor het Picture-profiel, met Device-ID-validatie, optionele Digest per camera, passage- en beeldopslag, bestaande watchlist/push-keten en idempotente retries. Zonder Digest accepteert de receiver uitsluitend het geconfigureerde Device ID vanaf het vaste camera-IP; doorgestuurde IP-headers worden niet vertrouwd. Succes-ACK volgt alleen na verwerking. PostgreSQL-integratie met synthetische uploads en push-stub getest; de gebruiker bevestigt werkende echte ITSAPI-ontvangst op productie en heeft `SnapInfo.Direction=Obverse/Reverse` waargenomen; de nieuwe richtingscorrectie moet nog fysiek worden getest. Doeladres volgens de huidige gebruikerswaarneming: `192.168.178.52:7070`. Zie [ondersteunde velden, beperkingen, lokale tests en exacte uitrolcommando’s](docs/itsapi-receiver.md).
 
 Camera-credentials worden met AES-256-GCM versleuteld opgeslagen. De browser krijgt
 opgeslagen credentials en volledige credential-URL's nooit terug.
@@ -452,7 +454,7 @@ handleiding nodig.
 
 ### Dahua-camera’s: ITSAPI en CGI afzonderlijk
 
-De vierstappenwizard en diagnose onderscheiden video, ontvanger, authenticatie, registratie, heartbeat en passage. De ITSAPI-hardwarekoppeling is nog niet voltooid. [Implementatie, instellingen en testmatrix](docs/itsapi-receiver.md) beschrijven het bewijs en de resterende stappen. Het bestaande [CGI-alternatief](docs/dahua-native-anpr.md) behoudt zijn eigen naam en werking.
+De vierstappenwizard en diagnose onderscheiden video, ontvanger, authenticatie, registratie, heartbeat en passage. De gebruiker bevestigt werkende ITSAPI-passages op productie. De nieuwe richtingsmapping vereist nog de lokale praktijktest. [Implementatie, instellingen en testmatrix](docs/itsapi-receiver.md) beschrijven het bewijs en de resterende stappen. Het bestaande [CGI-alternatief](docs/dahua-native-anpr.md) behoudt zijn eigen naam en werking.
 
 Verwijderen vereist adminrechten, trekt camera- en uploadcredentials in en archiveert de referentie voor historische passages/hits. Schakel ITSAPI vervolgens zelf uit op de fysieke camera. Demo-push vereist nu een expliciete keuze.
 
@@ -461,7 +463,7 @@ Verwijderen vereist adminrechten, trekt camera- en uploadcredentials in en archi
 
 Een actieve groep met **HIT aan** geeft bij een geldig actief lid één Hit per passage, met alle matchende groepen en redenen. Er bestaat geen aanvullend individueel HIT-vinkje. Het dashboard leest Hit-records rechtstreeks, gebruikt voor teller en de laatste vijf hits dezelfde dag in **Europe/Amsterdam**, en ververst iedere drie seconden. Demo blijft meetellen zoals voorheen; bestaande demo-records houden hun bronlabels, maar de algemene demo-tellerbanner is verwijderd.
 
-De bestaande CGI-koppeling blijft afzonderlijk beschikbaar. Drie samengevoegde JPEG-beelden zijn daar daadwerkelijk aangetroffen; de worker splitst overzicht, kenteken en voertuig volgens de ontvangen offsets en lengtes. Oude passages worden niet achteraf gewijzigd. De ITSAPI-parser en ACK zijn synthetisch getest; acceptatie door de echte Dahua-firmware moet nog worden bevestigd.
+De bestaande CGI-koppeling blijft afzonderlijk beschikbaar. Drie samengevoegde JPEG-beelden zijn daar daadwerkelijk aangetroffen; de worker splitst overzicht, kenteken en voertuig volgens de ontvangen offsets en lengtes. Oude passages worden niet achteraf gewijzigd. De ITSAPI-parser en ACK zijn automatisch getest; de gebruiker bevestigt daarnaast echte productieontvangst. De nieuwe richtingscorrectie is nog niet op hardware beoordeeld.
 
 Zie [bevindingen, regressietests en exacte praktijktest](docs/group-hit-dashboard.md).
 
