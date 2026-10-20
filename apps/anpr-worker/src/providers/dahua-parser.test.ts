@@ -40,3 +40,26 @@ describe("Dahua TrafficJunction parser",()=>{
 it("uses actual RealUTC epoch once while retaining camera UTC for diagnosis",()=>{const real="1789205682",utc="1789209282";const event=normalizeDahuaEvent(camera,{fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12","Events[0].RealUTC":real,"Events[0].UTC":utc,"Events[0].Direction":"Approach"}});expect(event?.occurredAt.toISOString()).toBe(new Date(Number(real)*1000).toISOString());expect(event?.rawMetadata?.UTC).toBe(Number(utc));expect(event?.direction).toBe("INCOMING")});
 it.each([["Leave","OUTGOING"],["Approach","INCOMING"],["0","UNKNOWN"]])("preserves supported Dahua direction %s without guessing numeric values",(raw,expected)=>{const event=normalizeDahuaEvent(camera,{fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12","Events[0].Direction":raw!}});expect(event?.direction).toBe(expected)});
 it("reverses normalized direction for the opposite physical camera mounting",()=>{const event=normalizeDahuaEvent({...camera,directionMapping:"AWAY_FROM_CAMERA_IS_INCOMING"},{fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12","Events[0].Direction":"Approach"}});expect(event?.sourceDirection).toBe("TOWARD_CAMERA");expect(event?.direction).toBe("OUTGOING")});
+
+describe("direction field selection", () => {
+  it("keeps the real historical numeric-looking Direction safely UNKNOWN", async () => {
+    const observed=(await import("./fixtures/dahua-direction-observed.json")).default;
+    const event=normalizeDahuaEvent(camera,{fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12",...observed.fields}});
+    expect(event?.direction).toBe("UNKNOWN");
+    expect(event?.rawMetadata).toMatchObject({rawDirection:"0",rawDirectionField:"Events[0].TrafficCar.Direction",directionStatus:"UNMAPPED_VALUE"});
+  });
+  // Values below are explicit parser contracts, not captured local payload values.
+  it.each([["Approach","INCOMING"],["Leave","OUTGOING"]])("reads DrivingDirection[0]=%s rather than Direction=0", (raw,expected) => {
+    const event=normalizeDahuaEvent(camera,{fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12","Events[0].TrafficCar.Direction":"0","Events[0].TrafficCar.DrivingDirection[0]":raw!,"Events[0].TrafficCar.DrivingDirection[1]":"ROAD_A","Events[0].TrafficCar.DrivingDirection[2]":"ROAD_B"}});
+    expect(event?.direction).toBe(expected);
+    expect(event?.rawMetadata?.rawDirectionField).toBe("Events[0].TrafficCar.DrivingDirection[0]");
+    expect(String(event?.rawMetadata?.directionEvidenceJson)).not.toMatch(/ROAD_A|ROAD_B/);
+  });
+  it("rejects conflicting values rather than selecting arbitrary field order", () => {
+    const event=normalizeDahuaEvent(camera,{fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12","Events[0].TrafficCar.Direction":"Leave","Events[0].TrafficCar.DrivingDirection[0]":"Approach"}});
+    expect(event?.direction).toBe("UNKNOWN");expect(event?.rawMetadata?.directionStatus).toBe("CONFLICTING_VALUES");
+  });
+  it("keeps missing direction UNKNOWN despite the configured camera direction", () => {
+    expect(normalizeDahuaEvent(camera,{fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12"}})?.direction).toBe("UNKNOWN");
+  });
+});

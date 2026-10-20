@@ -1,5 +1,5 @@
 import Fastify, { type FastifyRequest, type FastifyReply } from "fastify";
-import { resolveTimeZone } from "@anpr/shared";
+import { resolveTimeZone, dahuaDirectionEvidence } from "@anpr/shared";
 import { PassageService } from "@anpr/shared/passage-service";
 import { LocalStorageProvider, type StorageProvider } from "@anpr/shared/passage-storage";
 import { ItsapiPayloadError, parseItsapiHeartbeat, parseItsapiTollgate } from "./lib/itsapi-parser.js";
@@ -151,6 +151,12 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
         });
         return reply.code(200).send({Active:true,DeviceID:heartbeat.deviceId});
       }
+      // Existing administrator-controlled debug window expires after 15 minutes.
+      // Only authenticated/identity-verified passage requests reach this point.
+      if (registration.debugUntil && registration.debugUntil > new Date()) app.log.info({
+        event: "itsapi_direction_diagnostic", cameraId: identity.cameraId, configVersion: identity.version,
+        directionFields: dahuaDirectionEvidence(request.body)
+      }, "ITSAPI direction-only diagnostic");
       if (!registration.camera.active || registration.camera.isDraft) throw new ItsapiPayloadError("CAMERA_NOT_ACTIVE");
       const parsed = parseItsapiTollgate(request.body, {id:identity.cameraId,timezone:resolveTimeZone(registration.camera.vpnLocation?.timezone,config.PLATFORM_TIMEZONE),directionMapping:registration.camera.directionMapping});
       if (parsed.deviceId !== registration.expectedDeviceId) throw new ItsapiPayloadError("DEVICE_ID_MISMATCH");

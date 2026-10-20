@@ -1,0 +1,12 @@
+{
+  "provenance": "Direction-only extract from local current-camera-structure.log and matching PostgreSQL metadata, inspected 2026-10-19. No complete raw event retained.",
+  "fields": { "Events[0].TrafficCar.Direction": "0" },
+  "observedAdditionalFieldNames": [
+    "Events[0].JunctionDirection",
+    "Events[0].TrafficCar.CustomRoadwayDirection",
+    "Events[0].TrafficCar.DrivingDirection[0]",
+    "Events[0].TrafficCar.DrivingDirection[1]",
+    "Events[0].TrafficCar.DrivingDirection[2]"
+  ],
+  "additionalFieldValuesRetained": false
+}

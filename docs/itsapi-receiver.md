@@ -25,7 +25,7 @@ TollgateInfo: één object onder `Picture`, geen batch of multipart.
 | `Vehicle.VehicleType` | Bekende teksttypen naar platformenum; anders UNKNOWN |
 | `Vehicle.VehicleColor` | Bekende tekstkleuren naar platformenum; anders OTHER |
 | `Vehicle.VehicleSign` | Optioneel merk |
-| `SnapInfo.Direction` | Approach/Incoming en Away/Outgoing via bestaande camerarichtingmapping |
+| `SnapInfo.Direction` | Expliciete traveltekst (o.a. Approach/Incoming en Leave/Away/Outgoing) via gedeelde fysieke camerarichtingmapping; numerieke waarden bewaard maar niet gegokt |
 | `SnapInfo.SnapAddress` | Optionele passagelocatie; anders geconfigureerde cameralocatie |
 | `SnapInfo.LanNo` | Optionele rijstrook |
 | `NormalPic.Content` | Original Image, base64 JPEG |
@@ -94,7 +94,7 @@ De pushdispatcher gebruikt al unieke ontvanger-/hitkeys. De integratietest bewij
 
 Voor beide paden verschijnt één `itsapi_response`-log na de response met method, vast pad zonder querystring, statuscode, request-content-type, request-content-length en begrensde payloadstructuur. Content-type wordt gereduceerd tot application/json/other/none. Content-length is de opgegeven header, geen gemeten bytes. Voor vroege afwijzingen is de body `not_parsed`.
 
-Geen scalarwaarden, credentials, Authorization, kentekens, beeldbytes of ruwe exceptions worden gelogd. Alleen toegestane schemaveldnamen blijven herkenbaar; overige namen worden `field_N`. De tijdelijke database-structuurdiagnose blijft maximaal 15 minuten inschakelbaar en kent een bewaartermijn van 24 uur, maximaal 32 regels per camera. `ItsapiInbox` bevat foutcode, ontbrekende velden en eventueel structuur; geen opnieuw verwerkbare passagepayload. Een gelijk diagnostisch fingerprint verhoogt `attempts`.
+Standaard worden geen scalarwaarden, credentials, Authorization, kentekens, beeldbytes of ruwe exceptions gelogd. Uitsluitend binnen de bestaande 15-minuten-debugperiode worden daarnaast begrensde richtingtypen en toegestane richtingwoorden/-enumwaarden gelogd; vrije tekst, wegnamen en andere payloadinhoud blijven afgeschermd. Alleen toegestane schemaveldnamen blijven herkenbaar; overige namen worden `field_N`. De tijdelijke database-structuurdiagnose blijft maximaal 15 minuten inschakelbaar en kent een bewaartermijn van 24 uur, maximaal 32 regels per camera. `ItsapiInbox` bevat foutcode, ontbrekende velden en eventueel structuur; geen opnieuw verwerkbare passagepayload. Een gelijk diagnostisch fingerprint verhoogt `attempts`.
 
 ## Gewijzigde bestanden en productieartefacten
 
@@ -210,3 +210,6 @@ Cameratest na de uitrol:
 6. Bij 422: gebruik foutcode, `missing` en structuurdiagnose om de werkelijk afwijkende firmwarevelden vast te stellen. Deel geen ongeschoonde payload, kentekenfoto of Authorization-header.
 
 TODO vóór claim “hardwaregeverifieerd”: eigen echte payloads en ACK-acceptatie, confidence-schaal, richtingsbetekenis, tijdzone en daadwerkelijk ontvangen beeldrollen bevestigen. Andere registratie-endpoints en payloadvarianten blijven expliciet niet ondersteund.
+
+
+Zie [richtingonderzoek op echte lokale historie](dahua-direction-investigation.md) voor het onderscheid tussen de aanwezige CGI-passages en de ontbrekende ITSAPI-payloadhistorie, de exacte veldselectie en de veilige praktijktest.

@@ -199,3 +199,39 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
     expect((await upload(ITSAPI_ANPR_PATH,body)).statusCode).toBe(422);expect(storage.storePassageImage).not.toHaveBeenCalled();
   });
 });
+
+
+describe("ITSAPI direction contracts (synthetic, no local ITSAPI capture available)",()=>{
+  it.each([
+    ["Approach","INCOMING"],["Leave","OUTGOING"],["Incoming","INCOMING"],["Outgoing","OUTGOING"],
+    [0,"UNKNOWN"],[1,"UNKNOWN"],[2,"UNKNOWN"],["0","UNKNOWN"],
+    ["Approaching","UNKNOWN"],["Leaving","UNKNOWN"],["FutureFirmware","UNKNOWN"],[undefined,"UNKNOWN"]
+  ])("stores %s as %s without guessing firmware enums",async(value,expected)=>{
+    const body=fixture();Object.assign(body.Picture.SnapInfo,{Direction:value});
+    db.plateGroupMember.findMany.mockResolvedValue([{groupId:"group",reason:"Test",group:{id:"group",name:"Test"}}]);
+    expect((await upload(ITSAPI_ANPR_PATH,body)).statusCode).toBe(200);
+    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({direction:expected,timestamp:new Date("2026-10-16T08:00:00Z")})});
+    expect(db.hit.create).toHaveBeenCalledOnce();expect(db.attentionAnalysisJob.create).toHaveBeenCalledOnce();
+    if(value!==undefined)expect(db.passage.create.mock.calls[0][0].data.rawEventMetadata.rawDirection).toBe(value);
+  });
+  it("respects the reversed physical camera mapping",async()=>{
+    (await db.itsapiRegistration.findUnique()).camera.directionMapping="AWAY_FROM_CAMERA_IS_INCOMING";
+    expect((await upload(ITSAPI_ANPR_PATH,fixture())).statusCode).toBe(200);
+    expect(db.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({direction:"OUTGOING"})});
+  });
+  it("logs direction-only TollgateInfo evidence during the existing temporary debug window",async()=>{
+    (await db.itsapiRegistration.findUnique()).debugUntil=new Date("2026-10-16T08:15:00Z");
+    const log=vi.spyOn(app.log,"info"),body=fixture();
+    Object.assign(body.Picture.SnapInfo,{DrivingDirection:["Approach","PRIVATE_ROAD","PRIVATE_ROAD"],CaptureDirection:"Approaching",Password:"PRIVATE_PASSWORD"});
+    expect((await upload(ITSAPI_ANPR_PATH,body)).statusCode).toBe(200);
+    const diagnostics=log.mock.calls.filter(([entry])=>typeof entry==="object" && entry!==null && "event" in entry && entry.event==="itsapi_direction_diagnostic");
+    expect(diagnostics).toHaveLength(1);
+    expect(JSON.stringify(diagnostics)).toContain("Picture.SnapInfo.DrivingDirection[0]");
+    expect(JSON.stringify(diagnostics)).not.toMatch(/PRIVATE|TEST123|synthetic-device|Content|PlateNumber|Password/);
+  });
+  it("does not log direction values after the debug window expires",async()=>{
+    (await db.itsapiRegistration.findUnique()).debugUntil=new Date("2026-10-16T07:59:00Z");
+    const log=vi.spyOn(app.log,"info");await upload(ITSAPI_ANPR_PATH,fixture());
+    expect(log.mock.calls.some(([entry])=>typeof entry==="object" && entry!==null && "event" in entry && entry.event==="itsapi_direction_diagnostic")).toBe(false);
+  });
+});

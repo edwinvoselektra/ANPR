@@ -103,7 +103,7 @@ export async function onboardingRoutes(app: FastifyInstance) {
     const {id}=params.parse(request.params);await prisma.camera.findUniqueOrThrow({where:{id,archivedAt:null}});
     await prisma.itsapiRegistration.update({where:{cameraId:id},data:{debugUntil:new Date(Date.now()+15*60_000)}});
     await audit(request,"ITSAPI_SHAPE_DEBUG_ENABLED",{objectType:"Camera",objectId:id});
-    return {message:"Structuurdiagnose 15 minuten ingeschakeld; alleen veldnamen en typen, geen waarden of beelden. Bewaring maximaal 24 uur."};
+    return {message:"Diagnose 15 minuten ingeschakeld: structuur en toegestane richtingwaarden, geen kentekens, vrije tekst, beelden of credentials. Inboxstructuur maximaal 24 uur bewaard."};
   });
   app.get("/cameras/:id/diagnostics",{preHandler:requirePermission(PERMISSIONS.CAMERAS_VIEW)},async(request,reply)=>{
     const {id}=params.parse(request.params);const camera=await prisma.camera.findUniqueOrThrow({where:{id,archivedAt:null}});

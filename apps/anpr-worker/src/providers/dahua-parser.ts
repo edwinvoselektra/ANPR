@@ -1,5 +1,5 @@
 import type { VehicleColor, VehicleType } from "@prisma/client";
-import { mapCameraDirection, normalizeLicensePlate, parseCameraTime, resolveTimeZone, type CameraSourceDirection } from "@anpr/shared";
+import { mapCameraDirection, normalizeLicensePlate, parseCameraTime, resolveTimeZone, resolveDahuaDirection, dahuaDirectionEvidence } from "@anpr/shared";
 import type { EventImage, ManagedAnprCamera, NormalizedAnprEvent } from "../types.js";
 
 export type DahuaRawEvent = { receivedAt?: Date; fields: Record<string, string>; overviewImage?: EventImage; plateImage?: EventImage; extraImage?: EventImage; imageDiagnostics?: Record<string,string> };
@@ -42,13 +42,6 @@ const types: Record<string, VehicleType> = {
   motorcycle: "MOTORCYCLE", motorbike: "MOTORCYCLE", bus: "BUS", trailer: "TRAILER"
 };
 
-function sourceDirection(value?: string): CameraSourceDirection | undefined {
-  const normalized = value?.toLowerCase();
-  if (["incoming", "approach", "enter", "in", "toward", "towards"].includes(normalized ?? "")) return "TOWARD_CAMERA";
-  if (["outgoing", "leave", "exit", "out", "away"].includes(normalized ?? "")) return "AWAY_FROM_CAMERA";
-  return undefined;
-}
-
 function safeMetadata(fields: Record<string, string>) {
   const allowed = ["Code", "Action", "Index", "Channel", "GroupID", "CountInGroup", "IndexInGroup", "Lane", "PTS", "VehicleModel", "Speed", "UTC", "RealUTC", "SnapTime", "Time"];
   const result: Record<string, string | number | boolean> = {};
@@ -78,8 +71,15 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
   // with an event position. A real EventID remains the preferred source key.
   const sourceEventId = eventId ?? (groupId && eventPosition ? `${groupId}:${eventPosition}` : undefined);
   const timeZone=resolveTimeZone(camera.vpnLocation?.timezone,process.env.PLATFORM_TIMEZONE);
-  const rawDirection=suffix(raw.fields,["Direction"]);
-  const physicalDirection=sourceDirection(rawDirection);
+  // The local camera's saved structure contains DrivingDirection[0]; Direction
+  // itself is "0" and must not be guessed. Indexes 1/2 are road names, not enums.
+  const candidates = ["TrafficCar.DrivingDirection[0]", "DrivingDirection[0]", "TrafficCar.Direction", "Direction"].map(name => {
+    const entry = Object.entries(raw.fields).find(([key]) => key === name || key.endsWith(`.${name}`));
+    return { field: entry?.[0] ?? name, value: entry?.[1] };
+  });
+  const resolvedDirection = resolveDahuaDirection(candidates);
+  const rawDirection = typeof resolvedDirection.value === "string" ? resolvedDirection.value : undefined;
+  const physicalDirection = resolvedDirection.sourceDirection;
   const timeField=["RealUTC","UTC","SnapTime","Time"].find(field=>parseCameraTime(suffix(raw.fields,[field]),timeZone));
   return {
     cameraId: camera.id, receivedAt,
@@ -101,6 +101,8 @@ export function normalizeDahuaEvent(camera: ManagedAnprCamera, raw: DahuaRawEven
       ...(type ? { rawVehicleType: type.slice(0,100) } : {}),
       ...(color ? { rawVehicleColor: color.slice(0,100) } : {}),
       ...(rawDirection ? { rawDirection: rawDirection.slice(0,100) } : {}),
+      rawDirectionField: resolvedDirection.field ?? "NOT_RECEIVED", directionStatus: resolvedDirection.status,
+      directionEvidenceJson: JSON.stringify(dahuaDirectionEvidence(raw.fields)),
       ...(physicalDirection ? { sourceDirection: physicalDirection, directionMapping: camera.directionMapping ?? "TOWARD_CAMERA_IS_INCOMING" } : {}),
       timeSource: timeField??"RECEIPT_FALLBACK", timeZone,
       ...(suffix(raw.fields,["UTC"]) && suffix(raw.fields,["RealUTC"]) && Number.isFinite(Number(suffix(raw.fields,["UTC"]))) && Number.isFinite(Number(suffix(raw.fields,["RealUTC"]))) ? { utcDisagreementSeconds: Number(suffix(raw.fields,["UTC"]))-Number(suffix(raw.fields,["RealUTC"])) } : {}),

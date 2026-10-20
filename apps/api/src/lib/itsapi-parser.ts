@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { CameraDirectionMapping, VehicleColor, VehicleType } from "@prisma/client";
-import { mapCameraDirection, normalizeLicensePlate, parseCameraTime } from "@anpr/shared";
+import { mapCameraDirection, normalizeLicensePlate, parseCameraTime, resolveDahuaDirection } from "@anpr/shared";
 import type { EventImage, NormalizedAnprEvent } from "@anpr/shared/anpr-event";
 
 // Narrow Picture-profile adapter. Hardware compatibility is separate from validation.
@@ -21,7 +21,7 @@ const tollgate = z.object({
     }),
     SnapInfo: z.object({
       DeviceID: deviceId, AccurateTime: optionalText, SnapTime: optionalText,
-      Direction: optionalText, SnapAddress: optionalText, LanNo: optionalInt,
+      Direction: z.union([text, z.number().int().min(0).max(255)]).nullish().catch(undefined), SnapAddress: optionalText, LanNo: optionalInt,
     }),
     Vehicle: z.object({ VehicleType: optionalText, VehicleColor: optionalText, VehicleSign: optionalText }).nullish().catch(undefined),
     NormalPic: image.nullish(), CutoutPic: image.nullish(), VehiclePic: image.nullish(),
@@ -66,10 +66,9 @@ export function parseItsapiTollgate(body: unknown, camera: { id: string; timezon
   const accurateTime = parseTime(snap.AccurateTime);
   const occurredAt = accurateTime ?? parseTime(snap.SnapTime);
   if (!occurredAt) throw new ItsapiPayloadError("INVALID_EVENT_TIME", ["Picture.SnapInfo.AccurateTime or SnapTime (unambiguous camera-local time)"]);
-  const direction = snap.Direction?.trim().toLowerCase();
-  // Forward/reverse are retained as metadata: their relation to the configured road
-  // direction is not established. Only explicit approach/away values are mapped.
-  const sourceDirection = direction === "approach" || direction === "incoming" ? "TOWARD_CAMERA" : direction === "away" || direction === "outgoing" ? "AWAY_FROM_CAMERA" : undefined;
+  // Other ITSAPI field layouts require an actual profile capture before mapping.
+  const resolvedDirection = resolveDahuaDirection([{ field: "Picture.SnapInfo.Direction", value: snap.Direction }]);
+  const sourceDirection = resolvedDirection.sourceDirection;
   const sourceEventId = `itsapi:picture:v1:${createHash("sha256").update(JSON.stringify([
     camera.id, snap.DeviceID, occurredAt.toISOString(), normalizedPlate, p.Plate.Channel ?? 0,
   ])).digest("hex")}`;
@@ -85,7 +84,8 @@ export function parseItsapiTollgate(body: unknown, camera: { id: string; timezon
     overviewImage: decodeImage(p.NormalPic), plateImage: decodeImage(p.CutoutPic), extraImage: decodeImage(p.VehiclePic),
     rawMetadata: { provider:"DAHUA_ITSAPI", profile:"picture-v1", timeZone:camera.timezone,
       timeSource:accurateTime ? "AccurateTime" : "SnapTime", confidenceScale:255,
-      ...(snap.Direction ? { rawDirection:snap.Direction } : {}),
+      ...(snap.Direction != null ? { rawDirection:snap.Direction } : {}),
+      rawDirectionField: resolvedDirection.field ?? "NOT_RECEIVED", directionStatus: resolvedDirection.status,
     },
   } };
 }

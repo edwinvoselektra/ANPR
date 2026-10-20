@@ -11,6 +11,13 @@ let app:FastifyInstance|undefined;
 beforeEach(()=>{vi.clearAllMocks();prismaMock.passage.findMany.mockResolvedValue([passage]);prismaMock.passage.findFirst.mockResolvedValue(passage)});
 afterEach(async()=>{await app?.close();app=undefined});
 describe("passage API",()=>{
+  it.each(["INCOMING","OUTGOING","UNKNOWN"])("levert opgeslagen %s identiek in lijst en detail",async direction=>{
+    const record={...passage,direction};prismaMock.passage.findMany.mockResolvedValue([record]);prismaMock.passage.findFirst.mockResolvedValue(record);app=buildServer();
+    const [list,detail]=await Promise.all([app.inject({url:"/passages"}),app.inject({url:`/passages/${passage.id}`})]);
+    expect(list.statusCode).toBe(200);expect(detail.statusCode).toBe(200);
+    expect(list.json().passages[0].direction).toBe(direction);expect(detail.json().passage.direction).toBe(direction);
+  });
+
   it("levert nieuwste passages via een no-store response",async()=>{app=buildServer();const response=await app.inject({method:"GET",url:"/passages?limit=20"});expect(response.statusCode).toBe(200);expect(response.headers["cache-control"]).toBe("private, no-store");expect(response.json().passages[0].source).toBe("DAHUA_CAMERA");expect(prismaMock.passage.findMany).toHaveBeenCalledWith(expect.objectContaining({take:20,orderBy:[{timestamp:"desc"},{id:"desc"}]}))});
   it("geeft een nette 404 voor een ontbrekende passage",async()=>{prismaMock.passage.findFirst.mockResolvedValue(null);app=buildServer();const response=await app.inject({method:"GET",url:`/passages/${passage.id}`});expect(response.statusCode).toBe(404);expect(response.json().message).toBe("Deze passage bestaat niet (meer).")});
   it("weigert een ongeldige UUID",async()=>{app=buildServer();const response=await app.inject({method:"GET",url:"/passages/not-an-id"});expect(response.statusCode).toBe(400)});

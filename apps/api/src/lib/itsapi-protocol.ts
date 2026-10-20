@@ -8,7 +8,7 @@ export const ITSAPI_PROTOCOL_GAP = "ITSAPI-bericht niet verwerkt. Controleer fou
 
 // Unrecognized keys can themselves contain identifiers or credentials. Preserve only
 // known schema labels; everything else receives a positional, anonymous label.
-const safeShapeKeys = new Set(["Picture", "Plate", "PlateNumber", "SnapInfo", "NormalPic", "CutoutPic", "VehiclePic", "Content", "AccurateTime", "SnapTime", "SnapAddress", "VehicleType", "VehicleColor", "VehicleSign", "LanNo", "Active", "IsExist", "DeviceID", "DeviceId", "TollgateInfo", "KeepAlive", "Time", "UTC", "EventID", "EventId", "Info", "Data", "Object", "Vehicle", "Direction", "Lane", "LaneNo", "Channel", "ChannelID", "Count", "Type", "Code", "Name", "Color", "Speed", "Confidence", "Location", "Events", "Result"]);
+const safeShapeKeys = new Set(["Picture", "Plate", "PlateNumber", "SnapInfo", "NormalPic", "CutoutPic", "VehiclePic", "Content", "AccurateTime", "SnapTime", "SnapAddress", "VehicleType", "VehicleColor", "VehicleSign", "LanNo", "Active", "IsExist", "DeviceID", "DeviceId", "TollgateInfo", "KeepAlive", "Time", "UTC", "EventID", "EventId", "Info", "Data", "Object", "Vehicle", "Direction", "DrivingDirection", "CaptureDirection", "SnapDirection", "VehicleDirection", "JunctionDirection", "CustomRoadwayDirection", "Lane", "LaneNo", "Channel", "ChannelID", "Count", "Type", "Code", "Name", "Color", "Speed", "Confidence", "Location", "Events", "Result"]);
 
 export function payloadShape(value: unknown): unknown {
   let budget = 80;

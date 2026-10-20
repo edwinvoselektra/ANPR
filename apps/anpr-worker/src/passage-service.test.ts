@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { normalizeDahuaEvent } from "./providers/dahua-parser.js";
 import { PassageService } from "./passage-service.js";
 import { calculatePassageExpiry, formatLocalDate } from "@anpr/shared";
 import type { NormalizedAnprEvent } from "./types.js";
@@ -74,4 +75,12 @@ describe("server receipt time",()=>{
     expect(saved.map(item=>item.timezone)).toEqual(zones);
     expect(saved.map(item=>formatLocalDate(item.timestamp,item.timezone))).toEqual(["16-10-2026 10:00:00","16-10-2026 04:00:01","16-10-2026 17:00:02"]);
   });
+});
+
+
+it.each([["Approach","INCOMING"],["Leave","OUTGOING"]])("stores CGI DrivingDirection[0]=%s without replacing the mapped %s",async(raw,direction)=>{
+  const parsed=normalizeDahuaEvent({id:event.cameraId,name:"Fixture",location:"Fixture",direction:"BOTH",directionMapping:"TOWARD_CAMERA_IS_INCOMING",rtspHost:"192.0.2.10",rtspUsernameEncrypted:null,rtspPasswordEncrypted:null,anprProvider:"DAHUA_CGI",anprHttpProtocol:"http",anprHttpPort:80,anprChannel:1,updatedAt:new Date()}, {fields:{"Events[0].Code":"TrafficJunction","Events[0].Object.Text":"TEST12","Events[0].TrafficCar.Direction":"0","Events[0].TrafficCar.DrivingDirection[0]":raw!}});
+  expect(parsed).not.toBeNull();
+  await new PassageService({prisma,storage,dedupeWindowMs:3000,logger}).store(parsed!);
+  expect(prisma.passage.create).toHaveBeenCalledWith({data:expect.objectContaining({direction,rawEventMetadata:expect.objectContaining({directionSource:"CAMERA_EVENT_MAPPED",rawDirectionField:"Events[0].TrafficCar.DrivingDirection[0]"})})});
 });
