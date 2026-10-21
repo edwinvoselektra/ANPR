@@ -719,7 +719,8 @@ model ItsapiRegistration {
   camera               Camera   @relation(fields: [cameraId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   username             String   @unique
   passwordEncrypted    String
-  expectedDeviceId     String?
+  expectedDeviceId     String?  @unique
+  expectedSourceIp     String?
   protocolVersion      String?
   receiverOrigin       String?
   heartbeatSeconds     Int      @default(300)

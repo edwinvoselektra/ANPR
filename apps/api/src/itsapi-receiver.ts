@@ -13,6 +13,12 @@ import { decryptSecret } from "./lib/crypto.js";
 import { challenge, parseDigest, verifyDigest } from "./lib/itsapi-digest.js";
 import { ITSAPI_PROTOCOL_GAP, ITSAPI_HEARTBEAT_PATH, ITSAPI_ANPR_PATH, payloadShape } from "./lib/itsapi-protocol.js";
 
+// An explicit NAT peer replaces the direct camera address, never a whole subnet.
+function sourceAllowed(registration: {expectedSourceIp?: string | null; camera: {rtspHost: string | null} | null}, sourceIp: string) {
+  const expected = registration.expectedSourceIp ?? registration.camera?.rtspHost;
+  return Boolean(expected && isIP(expected) && expected === sourceIp);
+}
+
 // Shared, bounded receiver in the API process, with a separate upload-only listener.
 export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageProvider = new LocalStorageProvider(config.STORAGE_PATH, 8_000_000)) {
   const app = Fastify({ logger: true, disableRequestLogging: true, bodyLimit: 16_000_000, requestTimeout: 15_000, connectionTimeout: 20_000, keepAliveTimeout: 65_000, trustProxy: false });
@@ -47,7 +53,7 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
       if (candidates.length !== 1) return reply.code(403).send({error:"DEVICE_ID_UNKNOWN"});
       const registration = candidates[0]!;
       if (registration.authenticationEnabled) return reply.code(401).header("WWW-Authenticate",challenge(config.CAMERA_CREDENTIALS_KEY)).send();
-      if (registration.camera.rtspHost !== sourceIp) return reply.code(403).send({error:"SOURCE_IP_MISMATCH"});
+      if (!sourceAllowed(registration, sourceIp)) return reply.code(403).send({error:"SOURCE_IP_MISMATCH"});
       identities.set(request,{cameraId:registration.cameraId,version:registration.camera.configVersion,digestAuthenticated:false,sourceIp});
       return;
     }
@@ -66,6 +72,7 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
       try { await db.itsapiDigestReplay.create({data:proof}); }
       catch (error) { if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return reply.code(401).header("WWW-Authenticate",challenge(config.CAMERA_CREDENTIALS_KEY)).send(); throw error; }
     }
+    if (registration!.expectedSourceIp && !sourceAllowed(registration!, sourceIp)) return reply.code(403).send({error:"SOURCE_IP_MISMATCH"});
     identities.set(request,{cameraId:camera.id,version:camera.configVersion,digestAuthenticated:true,sourceIp});
   });
   app.addHook("onResponse", async (request, reply) => {
@@ -122,15 +129,16 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
     const registration = await db.itsapiRegistration.findUnique({ where:{cameraId:identity.cameraId}, include:{camera:{include:{vpnLocation:{select:{timezone:true}}}}} });
     if (!registration || registration.camera.configVersion !== identity.version) throw new ItsapiPayloadError("REGISTRATION_REVOKED");
     if (registration.authenticationEnabled !== identity.digestAuthenticated) throw new ItsapiPayloadError("REGISTRATION_REVOKED");
-    if (!identity.digestAuthenticated && registration.camera.rtspHost !== identity.sourceIp) throw new ItsapiPayloadError("SOURCE_IP_MISMATCH");
+    if ((!identity.digestAuthenticated || registration.expectedSourceIp) && !sourceAllowed(registration, identity.sourceIp)) throw new ItsapiPayloadError("SOURCE_IP_MISMATCH");
     if (registration.protocolVersion !== "V1.19") throw new ItsapiPayloadError("UNSUPPORTED_PROTOCOL_VERSION");
     if (!registration.expectedDeviceId) throw new ItsapiPayloadError("DEVICE_ID_NOT_CONFIGURED");
     return { identity, registration };
   }
   async function accept(tx: Prisma.TransactionClient, identity: {cameraId:string;version:number;digestAuthenticated:boolean;sourceIp:string}, deviceId: string, kind: "heartbeat" | "passage") {
     const {cameraId,version,digestAuthenticated,sourceIp}=identity;
-    const current = await tx.itsapiRegistration.findUnique({where:{cameraId}});
-    const updated = await tx.itsapiRegistration.updateMany({ where:{cameraId,expectedDeviceId:deviceId,protocolVersion:"V1.19",authenticationEnabled:digestAuthenticated,...(!digestAuthenticated?{camera:{rtspHost:sourceIp}}:{})}, data:{
+    const current = await tx.itsapiRegistration.findUnique({where:{cameraId},include:{camera:true}});
+    if (!current || ((!digestAuthenticated || current.expectedSourceIp) && !sourceAllowed(current, sourceIp))) throw new ItsapiPayloadError("SOURCE_IP_MISMATCH");
+    const updated = await tx.itsapiRegistration.updateMany({ where:{cameraId,expectedDeviceId:deviceId,protocolVersion:"V1.19",authenticationEnabled:digestAuthenticated,...(!digestAuthenticated ? {OR:[{expectedSourceIp:sourceIp},{expectedSourceIp:null,camera:{rtspHost:sourceIp}}]} : {OR:[{expectedSourceIp:null},{expectedSourceIp:sourceIp}]} )}, data:{
       ...(current?.evidenceVersion !== version ? {lastHeartbeatAt:null,lastEventAt:null} : {}),
       lastRequestAt:new Date(), ...(digestAuthenticated?{lastAuthenticatedAt:new Date()}:{}), lastIdentityAt:new Date(), evidenceVersion:version, lastErrorCode:null,
       ...(kind === "heartbeat" ? {lastHeartbeatAt:new Date()} : {lastEventAt:new Date()}),

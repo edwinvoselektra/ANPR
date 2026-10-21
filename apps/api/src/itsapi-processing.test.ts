@@ -54,13 +54,13 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
     const response=await uploadWithoutAuth(fixture());
     expect(response.statusCode).toBe(200);expect(response.json()).toEqual({Result:true,DeviceID:device});
     expect(db.passage.create).toHaveBeenCalledOnce();
-    expect(db.itsapiRegistration.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({authenticationEnabled:false,camera:{rtspHost:"192.168.178.248"}}),data:expect.not.objectContaining({lastAuthenticatedAt:expect.anything()})}));
+    expect(db.itsapiRegistration.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({authenticationEnabled:false,OR:[{expectedSourceIp:"192.168.178.248"},{expectedSourceIp:null,camera:{rtspHost:"192.168.178.248"}}]}),data:expect.not.objectContaining({lastAuthenticatedAt:expect.anything()})}));
   });
   it("verwerkt KeepAlive zonder Digest via dezelfde Device ID- en bron-IP-controle",async()=>{
     (await db.itsapiRegistration.findUnique()).authenticationEnabled=false;
     const response=await app.inject({method:"POST",url:ITSAPI_HEARTBEAT_PATH,remoteAddress:"192.168.178.248",payload:{Active:"keepAlive",DeviceID:device}});
     expect(response.statusCode).toBe(200);expect(response.json()).toEqual({Active:true,DeviceID:device});
-    expect(db.itsapiRegistration.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({authenticationEnabled:false,camera:{rtspHost:"192.168.178.248"}})}));
+    expect(db.itsapiRegistration.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({authenticationEnabled:false,OR:[{expectedSourceIp:"192.168.178.248"},{expectedSourceIp:null,camera:{rtspHost:"192.168.178.248"}}]})}));
   });
   it("weigert auth-uit met onbekende Device ID",async()=>{
     (await db.itsapiRegistration.findUnique()).authenticationEnabled=false;
@@ -73,6 +73,64 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
     (await db.itsapiRegistration.findUnique()).authenticationEnabled=false;
     const response=await uploadWithoutAuth(fixture(),"192.168.178.247",{"x-forwarded-for":"192.168.178.248"});
     expect(response.statusCode).toBe(403);expect(response.json().error).toBe("SOURCE_IP_MISMATCH");expect(db.passage.create).not.toHaveBeenCalled();
+  });
+  it.each([ITSAPI_HEARTBEAT_PATH, ITSAPI_ANPR_PATH])("identificeert VPN-camera op %s met Device ID en expliciete peer", async path => {
+    const registration = await db.itsapiRegistration.findUnique();
+    Object.assign(registration, {authenticationEnabled:false, expectedSourceIp:"10.99.0.11"});
+    registration.camera.rtspHost = "10.20.10.201";
+    const payload = path === ITSAPI_HEARTBEAT_PATH ? {Active:"keepAlive", DeviceID:device} : fixture();
+    const response = await app.inject({method:"POST",url:path,remoteAddress:"::ffff:10.99.0.11",payload});
+    expect(response.statusCode).toBe(200);
+    if(path === ITSAPI_ANPR_PATH) {
+      expect(db.passage.create).toHaveBeenCalledOnce();
+      expect(db.attentionAnalysisJob.create).toHaveBeenCalledOnce();
+      expect(storage.storePassageImage).toHaveBeenCalledOnce();
+    } else expect(db.passage.create).not.toHaveBeenCalled();
+  });
+  it.each([ITSAPI_HEARTBEAT_PATH, ITSAPI_ANPR_PATH])("weigert onbekende Device ID via vertrouwde peer op %s", async path => {
+    const registration = await db.itsapiRegistration.findUnique();
+    Object.assign(registration, {authenticationEnabled:false, expectedSourceIp:"10.99.0.11"});
+    db.itsapiRegistration.findMany.mockResolvedValue([]);
+    const payload = path === ITSAPI_HEARTBEAT_PATH ? {Active:"keepAlive",DeviceID:"wrong"} : fixture();
+    if("Picture" in payload) payload.Picture.SnapInfo.DeviceID = "wrong";
+    const response = await app.inject({method:"POST",url:path,remoteAddress:"10.99.0.11",payload});
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error).toBe("DEVICE_ID_UNKNOWN");
+    expect(db.passage.create).not.toHaveBeenCalled();
+    expect(storage.storePassageImage).not.toHaveBeenCalled();
+  });
+  it.each([ITSAPI_HEARTBEAT_PATH, ITSAPI_ANPR_PATH])("weigert juiste Device ID via onbekende bron op %s", async path => {
+    Object.assign(await db.itsapiRegistration.findUnique(), {authenticationEnabled:false, expectedSourceIp:"10.99.0.11"});
+    const payload = path === ITSAPI_HEARTBEAT_PATH ? {Active:"keepAlive",DeviceID:device} : fixture();
+    const response = await app.inject({method:"POST",url:path,remoteAddress:"10.99.0.12",headers:{"x-forwarded-for":"10.99.0.11"},payload});
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error).toBe("SOURCE_IP_MISMATCH");
+    expect(db.passage.create).not.toHaveBeenCalled();
+  });
+  it("past een expliciete peer ook bij geldige Digest toe", async () => {
+    Object.assign(await db.itsapiRegistration.findUnique(),{expectedSourceIp:"10.99.0.11"});
+    const challenge = await app.inject({method:"POST",url:ITSAPI_ANPR_PATH});
+    const authorization = createDigestAuthorization({challenge:String(challenge.headers["www-authenticate"]),method:"POST",uri:ITSAPI_ANPR_PATH,username,password});
+    expect((await app.inject({method:"POST",url:ITSAPI_ANPR_PATH,remoteAddress:"10.99.0.12",headers:{authorization},payload:fixture()})).statusCode).toBe(403);
+    expect(db.passage.create).not.toHaveBeenCalled();
+    expect((await app.inject({method:"POST",url:ITSAPI_ANPR_PATH,remoteAddress:"10.99.0.11",headers:{authorization},payload:fixture()})).statusCode).toBe(200);
+  });
+  it("weigert ambigue Device ID voordat broncontrole of opslag plaatsvindt", async () => {
+    const registration = await db.itsapiRegistration.findUnique();
+    registration.authenticationEnabled=false;
+    db.itsapiRegistration.findMany.mockResolvedValue([registration, {...registration,cameraId:"other"}]);
+    expect((await uploadWithoutAuth(fixture())).statusCode).toBe(403);
+    expect(db.passage.create).not.toHaveBeenCalled();
+  });
+  it("trekt een gewijzigde peer tijdens verwerking in", async () => {
+    const registration = await db.itsapiRegistration.findUnique();
+    Object.assign(registration,{authenticationEnabled:false,expectedSourceIp:"10.99.0.11"});
+    storage.storePassageImage.mockImplementation(async()=>{
+      registration.expectedSourceIp="10.99.0.12";
+      return "passages/synthetic.jpg";
+    });
+    expect((await uploadWithoutAuth(fixture(),"10.99.0.11")).statusCode).toBe(403);
+    expect(storage.delete).toHaveBeenCalled();
   });
   it("blijft bij auth-aan zonder Digest een challenge geven",async()=>{
     const response=await uploadWithoutAuth(fixture());

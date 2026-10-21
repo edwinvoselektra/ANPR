@@ -1,3 +1,5 @@
+> Update 21 oktober 2026: bronvalidatie ondersteunt een expliciet verwacht VPN-peer-IP per camera; DeviceID’s worden uniek afgedwongen. Zie [onderzoek, veilige policy, migratie en testplan](itsapi-vpn-identification.md). Oudere uitrolinstructies hieronder zijn geen opdracht tot productie-deploy.
+
 # Dahua ITSAPI: heartbeat, passages en uitrol
 
 ## Status — 2 oktober 2026

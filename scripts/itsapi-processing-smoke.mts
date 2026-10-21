@@ -68,7 +68,23 @@ try {
  assert(enriched.vehicleImage1ObjectId&&enriched.plateImageObjectId&&enriched.vehicleImage2ObjectId);
  assert.equal(await db.hit.count({where:{cameraId}}),2);
  assert.equal((await send(tollgate,{Unexpected:{}})).statusCode,422);
- console.log("PASS: server receipt timestamp, independent camera diagnostic timestamp, matching hit time, stable time on retry/late images, heartbeat, Device ID, Digest, concurrent retry deduplication, three images, optional fields, late images, one push per hit despite camera retry. Synthetic fixtures; no hardware claim.");
+ // Database constraint, not merely mocked lookup ambiguity: duplicate provisioning rolls back.
+ await assert.rejects(db.camera.create({data:{name:`${marker}-duplicate`,location:"Synthetic",direction:"BOTH",uploadRegistration:{create:{username:`${marker}-duplicate`,passwordEncrypted:encryptSecret(password)!,expectedDeviceId:deviceId}}}}), (error: any) => error.code === "P2002");
+ assert.equal(await db.camera.count({where:{name:`${marker}-duplicate`}}),0);
+ // Same receiver, real PostgreSQL and image storage, synthetic WireGuard/NAT socket source.
+ await db.camera.update({where:{id:cameraId},data:{rtspHost:"10.20.10.201",configVersion:{increment:1}}});
+ await db.itsapiRegistration.update({where:{cameraId},data:{authenticationEnabled:false,expectedSourceIp:"10.99.0.11"}});
+ const vpnSend = (path:string, body:object, source="10.99.0.11") => app.inject({method:"POST",url:path,remoteAddress:source,payload:body});
+ for (const path of [heartbeat,tollgate]) {
+   const body = path === heartbeat ? {Active:"keepAlive",DeviceID:deviceId} : {Picture:{...payload.Picture,SnapInfo:{...payload.Picture.SnapInfo,AccurateTime:"2026-10-02 13:25:00.123"}}};
+   assert.equal((await vpnSend(path,body,"10.99.0.12")).statusCode,403);
+   const wrong = path === heartbeat ? {Active:"keepAlive",DeviceID:"unknown-synthetic"} : {Picture:{...payload.Picture,SnapInfo:{...payload.Picture.SnapInfo,DeviceID:"unknown-synthetic"}}};
+   assert.equal((await vpnSend(path,wrong)).statusCode,403);
+   assert.equal((await vpnSend(path,body)).statusCode,200);
+ }
+ assert.equal(await db.passage.count({where:{cameraId}}),3);
+ assert((await db.itsapiRegistration.findUniqueOrThrow({where:{cameraId}})).lastEventAt);
+ console.log("PASS: VPN peer identity, unknown source/device rejection, unique Device ID constraint, server receipt timestamp, independent camera diagnostic timestamp, matching hit time, stable time on retry/late images, heartbeat, Device ID, Digest, concurrent retry deduplication, three images, optional fields, late images, one push per hit despite camera retry. Synthetic fixtures; no hardware claim.");
 } finally {
  await app.close();
  await db.passage.deleteMany({where:{cameraId}});
