@@ -76,7 +76,7 @@ export async function onboardingRoutes(app: FastifyInstance) {
   });
   app.put("/cameras/:id/itsapi",{preHandler:requireAdmin()},async(request)=>{
     const {id}=params.parse(request.params);
-    const body=z.object({receiverOrigin:z.string().url(),addressConfirmed:z.literal(true),expectedDeviceId:z.string().trim().min(1).max(200),protocolVersion:z.string().trim().min(1).max(100),heartbeatSeconds:z.coerce.number().int().min(5).max(86400),authenticationEnabled:z.boolean().default(true),expectedSourceIp:z.union([z.string().trim().ip(),z.literal("")]).nullable().optional()}).parse(request.body);
+    const body=z.object({receiverOrigin:z.string().url(),addressConfirmed:z.literal(true),expectedDeviceId:z.string().trim().min(1).max(200),protocolVersion:z.string().trim().min(1).max(100),heartbeatSeconds:z.coerce.number().int().min(5).max(86400),authenticationEnabled:z.boolean().default(true),expectedSourceIp:z.string().trim().refine(value=>value === "" || isIP(value) === 4,{message:"Vul een geldig IPv4-adres in of laat het veld leeg."}).nullable().optional()}).parse(request.body);
     const camera=await prisma.camera.findUniqueOrThrow({where:{id,archivedAt:null}});
     if(!body.authenticationEnabled&&!body.expectedSourceIp&&(!camera.rtspHost||!isIP(camera.rtspHost)))throw Object.assign(new Error("Authentication uit vereist een vast camera-IP of een expliciet verwacht bron-IP."),{statusCode:400});
     const origin=receiverOrigin(body.receiverOrigin,camera.rtspHost?normalizeCameraHost(camera.rtspHost):null);

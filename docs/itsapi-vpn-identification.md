@@ -80,7 +80,7 @@ De uitgebreide processing-smoke test echte PostgreSQL-unique afwijzing/rollback,
 
 ## Productie: uitsluitend voorbereiding en later acceptatietesten
 
-Stop vóór deployment. Laat eerst lokaal de echte PostgreSQL-smoke en Docker-builds slagen. Docker Desktop was tijdens deze implementatie niet bereikbaar; migratie-uitvoering, echte PostgreSQL-integratie en Docker-build zijn hier dus niet bevestigd.
+Stop vóór deployment. De eerder geblokkeerde lokale PostgreSQL-smokes, migraties, Docker-builds en Compose-controles zijn op 21 oktober 2026 alsnog geslaagd. Zie [actuele resultaten en isolatiebewijs](itsapi-source-ip-interface.md#uitgevoerde-controles-bij-deze-correctie). Een fysieke productiecontrole blijft na een afzonderlijke uitrol nodig.
 
 Controleer vóór een latere migratie alleen-lezen of bestaande DeviceID's dubbel zijn, zonder de identifiers in terminaluitvoer te zetten:
 
@@ -111,4 +111,4 @@ Leg bij resterende fouten pad, tijdstip, HTTP-status en de vaste errorcode uit d
 - Volledige API-testset: 277/277 geslaagd (met lokale testsockets toegestaan). Na de laatste compatibiliteitsaanpassing voor oudere beheerclients: 89/89 gerichte ITSAPI-tests geslaagd.
 - Workspace-TypeScript en lint geslaagd; Prisma-client gegenereerd en schema gevalideerd.
 - API-build en Next.js-productiebuild geslaagd; `git diff --check` zonder fouten.
-- Niet uitgevoerd: migratie op een echte PostgreSQL-server, uitgebreide PostgreSQL-/beeldopslag-smoke, Docker-build en Compose-validatie. De Linux Docker-CLI ontbreekt hier en Docker Desktop Linux Engine was ook via `docker.exe` niet bereikbaar. Deze controles blijven nodig vóór een uitrol.
+- Aanvullend op 21 oktober 2026: alle 14 migraties, drie PostgreSQL-integratiescripts, beide Docker-productiebuilds en runtimecontroles, en beide Compose-configuraties geslaagd. Volledige workspace-suite: 537/537 tests geslaagd. Uitsluitend een nieuwe lokale testdatabase gebruikt; zie het [actuele verslag](itsapi-source-ip-interface.md#uitgevoerde-controles-bij-deze-correctie). Fysieke camera-/WireGuard-productiecontrole niet uitgevoerd.

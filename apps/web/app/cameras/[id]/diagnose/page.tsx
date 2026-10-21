@@ -5,4 +5,25 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CameraDiagnostics } from "@/components/CameraDiagnostics";
 import { ItsapiSetup } from "@/components/ItsapiSetup";
-export default function Diagnose(){const{id}=useParams<{id:string}>();const[setup,setSetup]=useState(false);useEffect(()=>{void Promise.all([api<{user:{roles:string[]}}>("/auth/me"),api<{camera:{anprProvider:string}}>(`/cameras/${id}`)]).then(([auth,result])=>setSetup(result.camera.anprProvider==="DAHUA_ITSAPI"&&auth.user.roles.some(r=>r==="ADMIN"||r==="Administrator"))).catch(()=>setSetup(false))},[id]);return <><div className="page-header"><div><h1>Cameradiagnose</h1><p>Opgeslagen instellingen zijn geen bewijs dat de volledige koppeling werkt.</p></div><Link className="button secondary" href={`/cameras/${id}`}>Camera bewerken</Link></div><CameraDiagnostics cameraId={id}/>{setup&&<details className="card" style={{marginTop:20}}><summary>ITSAPI-uploadinstellingen (admin)</summary><ItsapiSetup cameraId={id}/></details>}</>}
+
+type SetupCamera={anprProvider:string;rtspHost:string|null};
+export default function Diagnose(){
+  const{id}=useParams<{id:string}>();
+  const[camera,setCamera]=useState<SetupCamera>();
+  const[admin,setAdmin]=useState(false);
+  const[error,setError]=useState("");
+  const[retry,setRetry]=useState(0);
+  useEffect(()=>{
+    let cancelled=false;
+    setCamera(undefined);setAdmin(false);setError("");
+    void Promise.all([api<{user:{roles:string[]}}>("/auth/me",{cache:"no-store"}),api<{camera:SetupCamera}>(`/cameras/${id}`,{cache:"no-store"})])
+      .then(([auth,result])=>{if(!cancelled){setCamera(result.camera);setAdmin(auth.user.roles.some(r=>r==="ADMIN"||r==="Administrator"))}})
+      .catch(e=>{if(!cancelled)setError(e instanceof Error?e.message:"ITSAPI-instellingen niet beschikbaar.")});
+    return()=>{cancelled=true};
+  },[id,retry]);
+  return <>
+    <div className="page-header"><div><h1>Cameradiagnose</h1><p>Opgeslagen instellingen zijn geen bewijs dat de volledige koppeling werkt.</p></div><Link className="button secondary" href={`/cameras/${id}`}>Camera bewerken</Link></div>
+    {error?<div className="alert"><p role="alert">ITSAPI-uploadinstellingen laden mislukt: {error}</p><button type="button" className="button secondary" onClick={()=>setRetry(value=>value+1)}>Opnieuw laden</button></div>:!camera?<p role="status">Toegang tot ITSAPI-instellingen controleren…</p>:admin&&camera.anprProvider==="DAHUA_ITSAPI"?<section className="card" aria-labelledby="itsapi-settings-heading"><h2 id="itsapi-settings-heading">ITSAPI-uploadinstellingen (admin)</h2><ItsapiSetup cameraId={id} cameraHost={camera.rtspHost}/></section>:null}
+    <CameraDiagnostics cameraId={id}/>
+  </>;
+}
