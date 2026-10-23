@@ -16,3 +16,8 @@ coverage
 data/
 .agents/
 .codex/
+
+.camera-health-*.txt
+
+# Server-owned production overlay: never commit or include in an image context.
+docker-compose.prod.yml

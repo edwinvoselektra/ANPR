@@ -60,3 +60,4 @@ export * from "./presentation.js";
 export * from "./attention-score.js";
 
 export { dahuaTravelDirection, resolveDahuaDirection, dahuaDirectionEvidence } from "./dahua-direction.js";
+export type { ItsapiSchemaViolation, ItsapiDiagnosticMessage, ItsapiStructureReport } from "./itsapi-diagnostics.js";

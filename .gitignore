@@ -32,3 +32,9 @@ Thumbs.db
 !.vscode/extensions.json
 .agents/
 .codex/
+
+# Local camera health verification output
+.camera-health-*.txt
+
+# Server-owned production overlay: never commit or include in an image context.
+docker-compose.prod.yml

@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings=0",
-    "test": "CAMERA_CREDENTIALS_KEY=0000000000000000000000000000000000000000000000000000000000000000 DATABASE_URL=postgresql://test:test@localhost:5432/test REDIS_URL=redis://localhost:6379 WEB_ORIGIN=http://localhost:3000 vitest run",
+    "test": "CAMERA_CREDENTIALS_KEY=0000000000000000000000000000000000000000000000000000000000000000 DATABASE_URL=postgresql://test:test@localhost:5432/test REDIS_URL=redis://localhost:6379 WEB_ORIGIN=http://localhost:3000 vitest run --configLoader runner",
     "test:runtime": "tsx src/runtime-smoke.ts"
   },
   "dependencies": {

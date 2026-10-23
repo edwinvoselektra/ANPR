@@ -12,6 +12,7 @@ import { audit } from "../lib/audit.js";
 import { testRtsp } from "../lib/rtsp.js";
 import { config } from "../config.js";
 import { cameraDiagnostics } from "../lib/camera-diagnostics.js";
+import { ITSAPI_CAPTURE_MS, safeItsapiEvidence } from "../lib/itsapi-diagnostics.js";
 import { ITSAPI_PROTOCOL_GAP } from "../lib/itsapi-protocol.js";
 
 const params = z.object({id:z.string().uuid()});
@@ -103,11 +104,31 @@ export async function onboardingRoutes(app: FastifyInstance) {
     await audit(request,rotate?"ITSAPI_CREDENTIALS_ROTATED":"ITSAPI_CREDENTIALS_REVEALED",{objectType:"Camera",objectId:id});
     return reply.header("Cache-Control","no-store").send({username:result.username,password:decryptSecret(result.passwordEncrypted)});
   });
-  app.post("/cameras/:id/itsapi/debug",{preHandler:requireAdmin()},async(request)=>{
-    const {id}=params.parse(request.params);await prisma.camera.findUniqueOrThrow({where:{id,archivedAt:null}});
-    await prisma.itsapiRegistration.update({where:{cameraId:id},data:{debugUntil:new Date(Date.now()+15*60_000)}});
-    await audit(request,"ITSAPI_SHAPE_DEBUG_ENABLED",{objectType:"Camera",objectId:id});
-    return {message:"Diagnose 15 minuten ingeschakeld: structuur en toegestane richtingwaarden, geen kentekens, vrije tekst, beelden of credentials. Inboxstructuur maximaal 24 uur bewaard."};
+  app.get("/cameras/:id/itsapi/diagnostic",{preHandler:requireAdmin()},async request=>{
+    const {id}=params.parse(request.params);
+    const camera=await prisma.camera.findUniqueOrThrow({where:{id,archivedAt:null},select:{id:true,name:true,configVersion:true,anprProvider:true}});
+    const registration=await prisma.itsapiRegistration.findUnique({where:{cameraId:id}});
+    const now=new Date();
+    const until=registration?.debugUntil??null;
+    const inbox=await prisma.itsapiInbox.findMany({where:{cameraId:id,configVersion:camera.configVersion,expiresAt:{gt:now}},orderBy:{lastReceivedAt:"desc"},take:5,select:{id:true,kind:true,receivedAt:true,lastReceivedAt:true,expiresAt:true,attempts:true,evidence:true}});
+    const current=registration?.evidenceVersion===camera.configVersion;
+    return {camera:{id,name:camera.name,configVersion:camera.configVersion},
+      capture:{active:Boolean(until&&until>now),until:until?.toISOString()??null,startedAt:until?new Date(until.getTime()-ITSAPI_CAPTURE_MS).toISOString():null,serverTime:now.toISOString()},
+      lastRequestAt:current?registration?.lastRequestAt?.toISOString()??null:null,
+      lastHeartbeatAt:current?registration?.lastHeartbeatAt?.toISOString()??null:null,
+      lastSuccessfulEventAt:current?registration?.lastEventAt?.toISOString()??null:null,
+      messages:inbox.map(item=>({id:item.id,kind:["ANPR_UNVERIFIED","HEARTBEAT_UNVERIFIED","UNKNOWN"].includes(item.kind)?item.kind:"UNKNOWN",firstReceivedAt:item.receivedAt.toISOString(),lastReceivedAt:item.lastReceivedAt.toISOString(),expiresAt:item.expiresAt.toISOString(),attempts:item.attempts,...safeItsapiEvidence(item.evidence)})),
+    };
+  });
+  app.post("/cameras/:id/itsapi/debug",{preHandler:requireAdmin(),config:{rateLimit:{max:12,timeWindow:"1 minute"}}},async(request)=>{
+    const {id}=params.parse(request.params);
+    const {enabled}=z.object({enabled:z.boolean().default(true)}).strict().parse(request.body??{});
+    const camera=await prisma.camera.findUniqueOrThrow({where:{id,archivedAt:null}});
+    if(camera.anprProvider!=="DAHUA_ITSAPI")throw Object.assign(new Error("Structuurdiagnose is beschikbaar voor ITSAPI-camera’s."),{statusCode:400});
+    const debugUntil=enabled?new Date(Date.now()+ITSAPI_CAPTURE_MS):null;
+    await prisma.itsapiRegistration.update({where:{cameraId:id},data:{debugUntil}});
+    await audit(request,enabled?"ITSAPI_SHAPE_DEBUG_ENABLED":"ITSAPI_SHAPE_DEBUG_DISABLED",{objectType:"Camera",objectId:id,metadata:{until:debugUntil?.toISOString()??null}});
+    return {active:enabled,until:debugUntil?.toISOString()??null,message:enabled?"Structuurdiagnose 15 minuten ingeschakeld. Wachten op een volgend afgewezen camerabericht. Alleen veilige veldtypen en validatiefouten worden vastgelegd; maximaal 24 uur bewaard.":"Structuurdiagnose uitgeschakeld. Bestaande veilige resultaten blijven tot hun bewaartermijn beschikbaar."};
   });
   app.get("/cameras/:id/diagnostics",{preHandler:requirePermission(PERMISSIONS.CAMERAS_VIEW)},async(request,reply)=>{
     const {id}=params.parse(request.params);const camera=await prisma.camera.findUniqueOrThrow({where:{id,archivedAt:null}});
@@ -117,7 +138,7 @@ export async function onboardingRoutes(app: FastifyInstance) {
     const latestPassage=["DAHUA_CGI","DAHUA_ITSAPI"].includes(camera.anprProvider)?await prisma.passage.findFirst({where:{cameraId:id,source:"DAHUA_CAMERA",status:"ACTIVE",...(camera.anprProvider==="DAHUA_ITSAPI"?{sourceEventId:{startsWith:"itsapi:picture:v1:"},rawEventMetadata:{path:["configVersion"],equals:camera.configVersion}}:{})},orderBy:{createdAt:"desc"},select:{createdAt:true,vehicleImage1ObjectId:true,plateImageObjectId:true,vehicleImage2ObjectId:true,hits:{select:{notificationStatus:true}}}}):null;
     const checks=cameraDiagnostics(camera,registration,receiverActive,new Date(),latestPassage);
     const admin=request.authUser?.roles.some(r=>r==="ADMIN"||r==="Administrator");
-    const inbox=admin?await prisma.itsapiInbox.findMany({where:{cameraId:id,expiresAt:{gt:new Date()}},orderBy:{receivedAt:"desc"},take:5,select:{id:true,state:true,kind:true,receivedAt:true,lastReceivedAt:true,attempts:true,evidence:true}}):[];
-    return reply.header("Cache-Control","no-store").send({camera:{id:camera.id,name:camera.name,isDraft:camera.isDraft,active:camera.active,anprProvider:camera.anprProvider,configVersion:camera.configVersion},summary:camera.anprProvider==="DAHUA_ITSAPI"?registration?.evidenceVersion===camera.configVersion&&registration?.lastIdentityAt?"Geldig ITSAPI-bericht ontvangen; bekijk heartbeat, passage en beelden hieronder.":registration?.evidenceVersion===camera.configVersion&&registration?.lastAuthenticatedAt?"Uploadcredentials gecontroleerd; ITSAPI-berichtformaat en camera-identiteit nog niet bevestigd.":"Wachten op verbinding vanuit de camera; ITSAPI-protocol nog niet bevestigd.":"Bestaande camera: bekijk video en het afzonderlijke CGI-alternatief.",nextAction:camera.anprProvider==="DAHUA_ITSAPI"?"Controleer geldige heartbeat, passageopslag en of de camera de ACK accepteert; bekijk bij 422 de structuurdiagnose.":"Test een nieuw beeld; CGI is geen ITSAPI.",checks,inbox});
+    const inbox=admin?await prisma.itsapiInbox.findMany({where:{cameraId:id,expiresAt:{gt:new Date()}},orderBy:{lastReceivedAt:"desc"},take:5,select:{id:true,state:true,kind:true,receivedAt:true,lastReceivedAt:true,attempts:true,evidence:true}}):[];
+    return reply.header("Cache-Control","no-store").send({camera:{id:camera.id,name:camera.name,isDraft:camera.isDraft,active:camera.active,anprProvider:camera.anprProvider,configVersion:camera.configVersion},canManageStructureDiagnostics:Boolean(admin&&camera.anprProvider==="DAHUA_ITSAPI"),summary:camera.anprProvider==="DAHUA_ITSAPI"?registration?.evidenceVersion===camera.configVersion&&registration?.lastIdentityAt?"Geldig ITSAPI-bericht ontvangen; bekijk heartbeat, passage en beelden hieronder.":registration?.evidenceVersion===camera.configVersion&&registration?.lastAuthenticatedAt?"Uploadcredentials gecontroleerd; ITSAPI-berichtformaat en camera-identiteit nog niet bevestigd.":"Wachten op verbinding vanuit de camera; ITSAPI-protocol nog niet bevestigd.":"Bestaande camera: bekijk video en het afzonderlijke CGI-alternatief.",nextAction:camera.anprProvider==="DAHUA_ITSAPI"?"Controleer geldige heartbeat, passageopslag en of de camera de ACK accepteert; bekijk bij 422 de structuurdiagnose.":"Test een nieuw beeld; CGI is geen ITSAPI.",checks,inbox:inbox.map(item=>({...item,evidence:safeItsapiEvidence(item.evidence)}))});
   });
 }

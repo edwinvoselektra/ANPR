@@ -2,7 +2,7 @@ import Fastify, { type FastifyRequest, type FastifyReply } from "fastify";
 import { resolveTimeZone, dahuaDirectionEvidence } from "@anpr/shared";
 import { PassageService } from "@anpr/shared/passage-service";
 import { LocalStorageProvider, type StorageProvider } from "@anpr/shared/passage-storage";
-import { ItsapiPayloadError, parseItsapiHeartbeat, parseItsapiTollgate } from "./lib/itsapi-parser.js";
+import { type ValidationViolation, ItsapiPayloadError, parseItsapiHeartbeat, parseItsapiTollgate } from "./lib/itsapi-parser.js";
 import rateLimit from "@fastify/rate-limit";
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
@@ -11,6 +11,7 @@ import { config } from "./config.js";
 import { prisma } from "./lib/prisma.js";
 import { decryptSecret } from "./lib/crypto.js";
 import { challenge, parseDigest, verifyDigest } from "./lib/itsapi-digest.js";
+import { safeItsapiEvidence } from "./lib/itsapi-diagnostics.js";
 import { ITSAPI_PROTOCOL_GAP, ITSAPI_HEARTBEAT_PATH, ITSAPI_ANPR_PATH, payloadShape } from "./lib/itsapi-protocol.js";
 
 // An explicit NAT peer replaces the direct camera address, never a whole subnet.
@@ -75,19 +76,8 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
     if (registration!.expectedSourceIp && !sourceAllowed(registration!, sourceIp)) return reply.code(403).send({error:"SOURCE_IP_MISMATCH"});
     identities.set(request,{cameraId:camera.id,version:camera.configVersion,digestAuthenticated:true,sourceIp});
   });
-  app.addHook("onResponse", async (request, reply) => {
+  app.addHook("onResponse", async request => {
     if (slots.delete(request)) concurrent--;
-    const path = request.url.split("?", 1)[0];
-    if (path !== ITSAPI_ANPR_PATH && path !== ITSAPI_HEARTBEAT_PATH) return;
-    const mediaType = request.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
-    const length = request.headers["content-length"];
-    // Never pass request, headers, errors, scalar payload values or raw URLs to the logger.
-    app.log.info({
-      event: "itsapi_response", method: request.method, path, statusCode: reply.statusCode,
-      contentType: mediaType === "application/json" ? mediaType : mediaType ? "other" : "none",
-      contentLength: length && /^[0-9]{1,10}$/.test(length) ? Number(length) : null,
-      payloadStructure: request.body === undefined ? "not_parsed" : payloadShape(request.body),
-    }, "ITSAPI receiver response");
   });
   app.addHook("onRequestAbort", async request => { if (slots.delete(request)) concurrent--; });
   app.setErrorHandler((error: Error & { statusCode?: number }, _request, reply) => {
@@ -98,7 +88,7 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
     await db.$queryRaw`SELECT 1`;
     return {service:"itsapi-receiver",listening:true,protocolVerified:false,cameraConnectionProven:false};
   });
-  async function diagnose(request: FastifyRequest, reply: FastifyReply, errorCode = "PROTOCOL_NOT_VERIFIED", missing: string[] = [], status = 422) {
+  async function diagnose(request: FastifyRequest, reply: FastifyReply, errorCode = "PROTOCOL_NOT_VERIFIED", missing: string[] = [], status = 422, violations: ValidationViolation[] = []) {
     const identity = identities.get(request);
     if (!identity) return reply.code(401).send();
     const body = request.body;
@@ -113,14 +103,19 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
       if (!registration) return false;
       await tx.itsapiRegistration.update({where:{cameraId:identity.cameraId},data:{lastRequestAt:now,...(identity.digestAuthenticated?{lastAuthenticatedAt:now}:{}),evidenceVersion:identity.version,...(registration.evidenceVersion !== identity.version ? {lastIdentityAt:null,lastHeartbeatAt:null,lastEventAt:null} : {}),lastErrorCode:errorCode}});
       const kind = path === ITSAPI_HEARTBEAT_PATH ? "HEARTBEAT_UNVERIFIED" : path === ITSAPI_ANPR_PATH ? "ANPR_UNVERIFIED" : "UNKNOWN";
-      const evidence = { errorCode, missing, method:request.method,path,contentType:request.headers["content-type"]?.split(";",1)[0] === "application/json" ? "application/json" : "other",shape:registration.debugUntil && registration.debugUntil > now ? payloadShape(body) : "Tijdelijke structuurdiagnose staat uit; inhoud niet bewaard.",deviceIdentityVerified:false };
-      await tx.itsapiInbox.upsert({where:{cameraId_configVersion_fingerprint:{cameraId:identity.cameraId,configVersion:identity.version,fingerprint}},create:{cameraId:identity.cameraId,configVersion:identity.version,fingerprint,kind,evidence:evidence as Prisma.InputJsonValue,expiresAt:new Date(now.getTime()+86_400_000)},update:{attempts:{increment:1},lastReceivedAt:now}});
+      await tx.itsapiInbox.deleteMany({where:{cameraId:identity.cameraId,expiresAt:{lte:now}}});
+      const capturing=Boolean(registration.debugUntil && registration.debugUntil > now);
+      const prior=capturing?null:await tx.itsapiInbox.findUnique({where:{cameraId_configVersion_fingerprint:{cameraId:identity.cameraId,configVersion:identity.version,fingerprint}},select:{evidence:true}});
+      const retained=safeItsapiEvidence(prior?.evidence);
+      const capturedAt=capturing?now.toISOString():retained.capturedAt;
+      const evidence = { errorCode, httpStatus:status, missing, violations, ...(capturedAt ? {structureCapturedAt:capturedAt} : {}), method:request.method,path,contentType:request.headers["content-type"]?.split(";",1)[0] === "application/json" ? "application/json" : "other",shape:capturing ? payloadShape(body) : retained.shape ?? "Tijdelijke structuurdiagnose staat uit; inhoud niet bewaard.",deviceIdentityVerified:request.body !== null && typeof request.body === "object" && (path === ITSAPI_ANPR_PATH ? (request.body as {Picture?:{SnapInfo?:{DeviceID?:unknown}}}).Picture?.SnapInfo?.DeviceID : (request.body as {DeviceID?:unknown}).DeviceID) === registration.expectedDeviceId };
+      await tx.itsapiInbox.upsert({where:{cameraId_configVersion_fingerprint:{cameraId:identity.cameraId,configVersion:identity.version,fingerprint}},create:{cameraId:identity.cameraId,configVersion:identity.version,fingerprint,kind,evidence:evidence as Prisma.InputJsonValue,expiresAt:new Date(now.getTime()+86_400_000)},update:{attempts:{increment:1},lastReceivedAt:now,evidence:evidence as Prisma.InputJsonValue}});
       const excess = await tx.itsapiInbox.findMany({where:{cameraId:identity.cameraId},orderBy:{receivedAt:"desc"},skip:32,select:{id:true}});
       if (excess.length) await tx.itsapiInbox.deleteMany({where:{id:{in:excess.map(x=>x.id)}}});
       return true;
     });
     if (!accepted) return reply.code(403).send({error:"REGISTRATION_REVOKED"});
-    return reply.code(status).send({ error:errorCode, message:ITSAPI_PROTOCOL_GAP, missing });
+    return reply.code(status).send({ error:errorCode, message:ITSAPI_PROTOCOL_GAP, missing, violations });
   }
 
   async function identityFor(request: FastifyRequest) {
@@ -140,11 +135,11 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
     if (!current || ((!digestAuthenticated || current.expectedSourceIp) && !sourceAllowed(current, sourceIp))) throw new ItsapiPayloadError("SOURCE_IP_MISMATCH");
     const updated = await tx.itsapiRegistration.updateMany({ where:{cameraId,expectedDeviceId:deviceId,protocolVersion:"V1.19",authenticationEnabled:digestAuthenticated,...(!digestAuthenticated ? {OR:[{expectedSourceIp:sourceIp},{expectedSourceIp:null,camera:{rtspHost:sourceIp}}]} : {OR:[{expectedSourceIp:null},{expectedSourceIp:sourceIp}]} )}, data:{
       ...(current?.evidenceVersion !== version ? {lastHeartbeatAt:null,lastEventAt:null} : {}),
-      lastRequestAt:new Date(), ...(digestAuthenticated?{lastAuthenticatedAt:new Date()}:{}), lastIdentityAt:new Date(), evidenceVersion:version, lastErrorCode:null,
+      lastRequestAt:new Date(), ...(digestAuthenticated?{lastAuthenticatedAt:new Date()}:{}), lastIdentityAt:new Date(), evidenceVersion:version, ...(kind === "passage" ? {lastErrorCode:null} : {}),
       ...(kind === "heartbeat" ? {lastHeartbeatAt:new Date()} : {lastEventAt:new Date()}),
     } });
     if (updated.count !== 1) throw new ItsapiPayloadError("REGISTRATION_REVOKED");
-    await tx.camera.update({where:{id:cameraId},data:{anprConnectionStatus:"CONNECTED",lastAnprConnectionAt:new Date(),lastAnprErrorCode:null,lastAnprError:null}});
+    await tx.camera.update({where:{id:cameraId},data:{anprConnectionStatus:"CONNECTED",lastAnprConnectionAt:new Date(),...(kind === "passage" ? {lastAnprErrorCode:null,lastAnprError:null} : {})}});
   }
   async function handleKnown(request: FastifyRequest, reply: FastifyReply, kind: "heartbeat" | "passage") {
     try {
@@ -175,7 +170,7 @@ export function buildItsapiReceiver(db: PrismaClient = prisma, storage: StorageP
       });
       return reply.code(200).send({Result:true,DeviceID:parsed.deviceId});
     } catch (error) {
-      if (error instanceof ItsapiPayloadError) return diagnose(request,reply,error.code,error.missing,["DEVICE_ID_MISMATCH","SOURCE_IP_MISMATCH","REGISTRATION_REVOKED"].includes(error.code)?403:422);
+      if (error instanceof ItsapiPayloadError) return diagnose(request,reply,error.code,error.missing,["DEVICE_ID_MISMATCH","SOURCE_IP_MISMATCH","REGISTRATION_REVOKED"].includes(error.code)?403:422,error.violations);
       if (error instanceof Error && error.message === "CAMERA_NOT_ACTIVE") return diagnose(request,reply,"REGISTRATION_REVOKED",[],403);
       throw error; // Safe global handler returns 503; never acknowledge failed storage/commit.
     }

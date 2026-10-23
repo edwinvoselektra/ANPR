@@ -35,7 +35,7 @@ beforeEach(()=>{
     passage:{findFirst:vi.fn().mockImplementation(async()=>passage),create:vi.fn().mockImplementation(async({data})=>{passage={id:"stored-passage",...data};return passage}),update:vi.fn()},
     plateGroupMember:{findMany:vi.fn().mockResolvedValue([])},hit:{create:vi.fn().mockResolvedValue({id:"hit"}),updateMany:vi.fn()},
     attentionAnalysisJob:{create:vi.fn()},
-    itsapiInbox:{upsert:vi.fn(),findMany:vi.fn().mockResolvedValue([])},
+    itsapiInbox:{findUnique:vi.fn().mockResolvedValue(null),deleteMany:vi.fn(),upsert:vi.fn(),findMany:vi.fn().mockResolvedValue([])},
     $transaction:vi.fn().mockImplementation(async fn=>fn(db)),
   };
   storage={storePassageImage:vi.fn().mockImplementation(async()=>`passages/${randomUUID()}.jpg`),delete:vi.fn()};
@@ -246,7 +246,7 @@ describe("ITSAPI Picture-profiel verwerking",()=>{
   });
   it("bewaart bij onbekende structuur alleen diagnose",async()=>{
     const response=await upload(ITSAPI_ANPR_PATH,{Unexpected:{password:"private",Plate:"private",Content:"private"}});
-    expect(response.statusCode).toBe(422);expect(response.json().missing).toContain("Picture.Plate.PlateNumber");
+    expect(response.statusCode).toBe(422);expect(response.json().missing).toEqual(["Picture"]);
     expect(JSON.stringify(db.itsapiInbox.upsert.mock.calls)).not.toContain("private");expect(db.passage.create).not.toHaveBeenCalled();
   });
   it("verwerkt geen conceptcamera als echte passage",async()=>{

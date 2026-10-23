@@ -13,6 +13,12 @@ browservideo en server-side OCR zijn nog niet gebouwd.
 
 Bestaande camera’s bewerken gebruikt gedeeltelijke PATCH-updates: alleen gewijzigde velden worden verstuurd, lege optionele velden en opgeslagen credentials blijven behouden. Zie [onderzoek en lokaal testplan voor camera-updatevalidatie](docs/camera-edit-validation.md).
 
+## Tijdelijke ITSAPI-structuurdiagnose
+
+Administrators vinden onder **Camera’s → camera → Cameradiagnose** direct de ITSAPI-structuurdiagnose. Start een opname van 15 minuten, wacht op het volgende afgewezen camerabericht en bekijk per veld het verwachte type, ontvangen type, validatiefout en de vaste schemagrens. Er worden geen kentekens, Device ID-waarden, afbeeldingen of credentials getoond. Stoppen, verversen en veilig kopiëren werken vanuit de interface. De capture schakelt automatisch uit; veilige resultaten blijven maximaal 24 uur beschikbaar.
+
+Deze afgebakende versie gebruikt de bestaande tabellen en vereist **geen nieuwe databasemigratie**. Camerabewaking en technische pushvoorkeuren volgen later. De specifieke Staverhul-oorzaak blijft open totdat een actuele veilige capture de afwijking aanwijst; de bestaande profielacceptatie en beveiligingscontroles blijven behouden. Zie [werking, lokaal onderzoek, tests en exacte Git-/productiecommando’s voor `/opt/anpr`](docs/itsapi-structure-diagnosis.md).
+
 ## Mobiel, tijdzones en rijrichting
 
 Live passages en Hits ondersteunen een bewaarde lijst-/tegelkeuze. Locaties hebben een IANA-tijdzone; passage, hit, zoeken en push gebruiken centrale tijd- en richtingverwerking. Zie het [eindrapport en handmatige testplan A–D](docs/mobile-time-direction.md) voor werking en beperkingen. Nieuwe echte camerapassages en hits gebruiken de serverontvangsttijd als UTC-tijdstip, onafhankelijk van de cameraklok. De interface toont dit in de IANA-tijdzone van de cameralocatie, inclusief automatische zomer-/wintertijd. Dahua `AccurateTime`/`SnapTime` blijft uitsluitend beschikbaar voor diagnose en eventherkenning. Vanuit passage- en kentekendetail kun je actieve groepen koppelen en koppelingen verwijderen; zie [tijd- en groepsherstel met lokaal testplan](docs/passage-time-groups.md). Bestaande passages worden niet herschreven. Livebeelden blijven bewust gereserveerd voor een toekomstige fase.
