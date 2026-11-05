@@ -1,6 +1,7 @@
 # ANPR Platform
 
 Retentie en opslagherstel: zie [onderzoeksbevindingen, FIFO-ontwerp, tests en gecontroleerde uitbreidingsroute](docs/retention-and-storage.md). Automatische retentie is standaard uitgeschakeld en start bij activering in proefmodus.
+De [productie-uitrol van 5 november 2026](docs/retention-production-2026-11-05.md) beschrijft de back-up, herstelproef, veilige configuratie en uitgevoerde proefrun zonder gegevensverwijdering.
 
 Een webbased ANPR-platform voor buurtpreventie. Het platform bevat veilig gebruikers-
 en camerabeheer, RTSP/FFmpeg-diagnose, afzonderlijke video- en ANPR-workers, Dahua
