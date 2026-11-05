@@ -9,6 +9,7 @@ import { LocalStorageProvider } from "./storage.js";
 import type { ProviderLogger } from "./types.js";
 import { AnprSupervisor } from "./worker.js";
 import { AttentionAnalysisService, startAttentionAnalysis } from "./attention-analysis.js";
+import { RetentionService, retentionSchema, startRetention } from "./retention.js";
 
 const prisma = new PrismaClient();
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: 1, connectTimeout: 2_000, enableOfflineQueue: false });
@@ -28,6 +29,9 @@ const supervisor = new AnprSupervisor({
 });
 const attentionAnalysis=new AttentionAnalysisService({prisma,logger});
 const stopAttentionAnalysis=startAttentionAnalysis(attentionAnalysis,logger);
+const retentionConfig = retentionSchema.parse(process.env);
+const retentionReport = (value: Record<string, unknown>) => logger.info(JSON.stringify(value));
+const stopRetention = startRetention(new RetentionService(prisma, config.STORAGE_PATH, retentionConfig, retentionReport), retentionConfig, retentionReport);
 let lastDatabaseRefreshAt: string | undefined;
 let reconciling = false;
 let shuttingDown = false;
@@ -57,6 +61,7 @@ async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true; clearInterval(refreshTimer); clearInterval(heartbeatTimer);
   stopAttentionAnalysis();
+  await stopRetention();
   await supervisor.stop(); await new Promise<void>((resolve) => healthServer.close(() => resolve()));
   redis.disconnect(); await prisma.$disconnect();
 }

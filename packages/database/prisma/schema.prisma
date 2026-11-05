@@ -698,6 +698,14 @@ model SystemSetting {
   updatedAt   DateTime @updatedAt
 }
 
+model RetentionImageDeletion {
+  objectId      String    @id
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+  lastAttemptAt DateTime?
+  lastError     String?
+}
+
 model RetentionException {
   id                String   @id @default(uuid()) @db.Uuid
   passageId         String   @db.Uuid

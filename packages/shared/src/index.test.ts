@@ -20,9 +20,9 @@ describe("kentekennormalisatie", () => {
 });
 
 describe("retentie", () => {
-  it("berekent standaard 14 dagen retentie", () => {
+  it("berekent standaard 90 dagen retentie", () => {
     const start = new Date("2026-01-01T00:00:00.000Z");
-    expect(calculatePassageExpiry(start).toISOString()).toBe("2026-01-15T00:00:00.000Z");
+    expect(calculatePassageExpiry(start).toISOString()).toBe("2026-04-01T00:00:00.000Z");
   });
 });
 

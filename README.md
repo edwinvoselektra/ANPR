@@ -1,5 +1,7 @@
 # ANPR Platform
 
+Retentie en opslagherstel: zie [onderzoeksbevindingen, FIFO-ontwerp, tests en gecontroleerde uitbreidingsroute](docs/retention-and-storage.md). Automatische retentie is standaard uitgeschakeld en start bij activering in proefmodus.
+
 Een webbased ANPR-platform voor buurtpreventie. Het platform bevat veilig gebruikers-
 en camerabeheer, RTSP/FFmpeg-diagnose, afzonderlijke video- en ANPR-workers, Dahua
 CGI-eventinname, passage- en hitopslag, kenteken- en groepenbeheer, database-side

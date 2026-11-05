@@ -83,7 +83,7 @@ async function seedDemo() {
       }});
     }
   }
-  await prisma.systemSetting.upsert({ where: { key: "retention.normalDays" }, update: {}, create: { key: "retention.normalDays", value: 14, description: "Standaardretentie normale passages" } });
+  await prisma.systemSetting.upsert({ where: { key: "retention.normalDays" }, update: {}, create: { key: "retention.normalDays", value: 90, description: "Standaardretentie normale passages" } });
 }
 
 try {

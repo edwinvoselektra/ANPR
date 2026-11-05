@@ -40,7 +40,7 @@ export function displayLicensePlate(value: string): string {
   return normalized;
 }
 
-export function calculatePassageExpiry(timestamp: Date, retentionDays = 14): Date {
+export function calculatePassageExpiry(timestamp: Date, retentionDays = 90): Date {
   if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 365) throw new Error("Ongeldige retentietermijn");
   return new Date(timestamp.getTime() + retentionDays * 86_400_000);
 }
